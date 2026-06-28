@@ -1,6 +1,8 @@
 # IAR 编译产物
 Debug/
+Debug_m4/
 Release/
+settings/
 *.o
 *.out
 *.pbi

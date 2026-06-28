@@ -6,7 +6,7 @@
 #include <math.h>
 
 static bool init(f32 *acc_scale, f32 *gyro_scale) {
-    imu660rc_init(IMU660RC_QUATERNION_120HZ);
+    imu660rc_init(IMU660RC_QUARTERNION_120HZ);
     *acc_scale  = 1.0f;
     *gyro_scale = 1.0f;
     return true;

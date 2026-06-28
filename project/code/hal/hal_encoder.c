@@ -2,6 +2,7 @@
  * hal_encoder.c — 双后轮编码器 (正交解码)
  */
 #include "hal_encoder.h"
+#include "config.h"
 #include "zf_common_headfile.h"
 
 // 硬件引脚 (根据实际接线修改)
