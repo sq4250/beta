@@ -10,6 +10,8 @@ static f32 g_theta_rate = 0.0f;  // 陀螺 z 轴 [rad/s]
 
 void ins_init(void) { g_theta = 0.0f; g_theta_rate = 0.0f; }
 
+f32 ins_theta_rate(void) { return g_theta_rate; }
+
 void ins_fuse_theta(f32 gyro_z, const f32 quat[4], bool has_quat) {
     g_theta_rate = gyro_z;
     if (has_quat) {
