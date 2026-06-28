@@ -100,7 +100,7 @@ for ctrl in range(int(12/DT_OUTER)):
         # 误差投影
         ct=np.cos(vst[2]); st_=np.sin(vst[2])
         ex=(vst[0]-rs[0])*ct+(vst[1]-rs[1])*st_          # ref-real
-        ey=-(rs[0]-vst[0])*st_+(rs[1]-vst[1])*ct
+        ey=(rs[0]-vst[0])*st_-(rs[1]-vst[1])*ct          # ref-real
 
         # ── LADRC 纵向 ──
         vm=rs[3]; eo=vm-z1
@@ -115,10 +115,11 @@ for ctrl in range(int(12/DT_OUTER)):
         rs[3] = np.clip(rs[3],0,3.5)
 
         # ── LQR 横向 ──
-        eth=(rs[2]-vst[2]+np.pi)%(2*np.pi)-np.pi; ed=rs[4]-vst[4]
-        eyd=rs[3]*np.sin(eth); ethd=rs[3]*np.tan(rs[4])/L-vst[3]*np.tan(vst[4])/L
+        # e = r - y, 前馈+反馈叠加
+        eth=(vst[2]-rs[2]+np.pi)%(2*np.pi)-np.pi; ed=vst[4]-rs[4]
+        eyd=rs[3]*np.sin(eth); ethd=vst[3]*np.tan(vst[4])/L-rs[3]*np.tan(rs[4])/L
         omg_fb=lqr5g(vst[3],ey,eyd,eth,ethd,ed)
-        omg_cmd=nn_omg-omg_fb
+        omg_cmd=nn_omg+omg_fb
 
         # Plant 横向 = 自行车
         rs[4] += omg_cmd*DT; rs[4]=np.clip(rs[4],-p.delta_max,p.delta_max)
@@ -152,15 +153,15 @@ for ctrl in range(int(12/DT_OUTER)):
         vst2=mcu_step(vst2,np.array([nn_a2,nn_omg2]))
         ct2=np.cos(vst2[2]); st2=np.sin(vst2[2])
         ex2=(vst2[0]-rs2[0])*ct2+(vst2[1]-rs2[1])*st2
-        ey2=-(rs2[0]-vst2[0])*st2+(rs2[1]-vst2[1])*ct2
+        ey2=(rs2[0]-vst2[0])*st2-(rs2[1]-vst2[1])*ct2
         vm2=rs2[3]; eo2=vm2-z12
         z12+=(-ALPHA*z12+B0*up2+fh2+2.0*WO*eo2)*DT; fh2+=(WO*WO*eo2)*DT
         u02=KP*ex2+KD*(vst2[3]-z12)+nn_a2+ALPHA*z12-fh2; thr2=u02/B0
         thr2=np.clip(thr2,-1,1); up2=thr2
         rs2[3]+=(-ALPHA*rs2[3]+B0*thr2)*DT; rs2[3]=np.clip(rs2[3],0,3.5)
-        eth2=(rs2[2]-vst2[2]+np.pi)%(2*np.pi)-np.pi; ed2=rs2[4]-vst2[4]
-        eyd2=rs2[3]*np.sin(eth2); ethd2=rs2[3]*np.tan(rs2[4])/L-vst2[3]*np.tan(vst2[4])/L
-        omg_fb2=lqr5g(vst2[3],ey2,eyd2,eth2,ethd2,ed2); omg_cmd2=nn_omg2-omg_fb2
+        eth2=(vst2[2]-rs2[2]+np.pi)%(2*np.pi)-np.pi; ed2=vst2[4]-rs2[4]
+        eyd2=rs2[3]*np.sin(eth2); ethd2=vst2[3]*np.tan(vst2[4])/L-rs2[3]*np.tan(rs2[4])/L
+        omg_fb2=lqr5g(vst2[3],ey2,eyd2,eth2,ethd2,ed2); omg_cmd2=nn_omg2+omg_fb2
         rs2[4]+=omg_cmd2*DT; rs2[4]=np.clip(rs2[4],-p.delta_max,p.delta_max)
         rs2[2]+=rs2[3]*np.tan(rs2[4])/L*DT; rs2[0]+=rs2[3]*np.cos(rs2[2])*DT; rs2[1]+=rs2[3]*np.sin(rs2[2])*DT
     fvx.append(vst2[0]);fvy.append(vst2[1]);frx.append(rs2[0]);fry.append(rs2[1])

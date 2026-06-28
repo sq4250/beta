@@ -43,7 +43,7 @@ void tracker_lqr_gains(f32 g[5], f32 v) {
 f32 tracker_step(const CarState *rs, const CarState *vst, f32 omega_ff) {
     f32 ct = cosf(vst->theta), st = sinf(vst->theta);
     g_ex = (vst->x - rs->x) * ct + (vst->y - rs->y) * st;
-    f32 e_y = (vst->x - rs->x) * st - (vst->y - rs->y) * ct;
+    f32 e_y = (rs->x - vst->x) * st - (rs->y - vst->y) * ct;
 
     // e = r - y = vst - rs (五误差统一, 与 sim_tracker.py 数学等价)
     f32 eth  = wrap_pi(vst->theta - rs->theta);
