@@ -45,16 +45,16 @@ f32 tracker_step(const CarState *rs, const CarState *vst, f32 omega_ff) {
     g_ex = (vst->x - rs->x) * ct + (vst->y - rs->y) * st;
     f32 e_y = -(rs->x - vst->x) * st + (rs->y - vst->y) * ct;
 
-    // 误差: e = r - y = vst - rs
-    f32 eth  = wrap_pi(vst->theta - rs->theta);
+    // 误差约定与 sim_tracker.py 严格一致 (LQR 增益按此约定离线计算)
+    f32 eth  = wrap_pi(rs->theta - vst->theta);
     f32 ey_d = rs->v * sinf(eth);
-    f32 eth_d = bicycle_curvature(vst->v, vst->delta)  // 参考角速度 (模型)
-              - ins_theta_rate();                      // 真实角速度 (IMU)
-    f32 ed    = vst->delta - rs->delta;
+    f32 eth_d = ins_theta_rate()                    // 真实车角速度 (IMU)
+              - bicycle_curvature(vst->v, vst->delta);  // 参考角速度 (模型)
+    f32 ed    = rs->delta - vst->delta;
 
     f32 g[5]; tracker_lqr_gains(g, vst->v);
     f32 omega_fb = g[0]*e_y + g[1]*ey_d + g[2]*eth + g[3]*eth_d + g[4]*ed;
-    f32 omega_cmd = omega_ff + omega_fb;  // 前馈 + 反馈纠正, 叠加
+    f32 omega_cmd = omega_ff - omega_fb;
 
     g_ey = e_y;
     g_omega_cmd = omega_cmd;
