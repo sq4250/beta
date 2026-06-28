@@ -2,6 +2,7 @@
  * tasks.c — 四层架构胶水
  *
  * ┌─────────────────────────────────────────────────────────┐
+ * │ 状态观测 (1kHz ISR) 5状态: x,y,θ(INS) v(编码器) δ=指令 │
  * │ 航点层 (20Hz main)  到达检测 + 3窗口获取               │
  * │ 规划层 (20Hz main)  车体变换 + NN → ZOH 动作           │
  * │ 跟踪层 (200Hz ISR)  虚拟车推进 + LQR + LADRC → 控制量  │
@@ -53,6 +54,9 @@ static void state_estimate(CarState *car, const SensorData *s);
 // 跟踪层 (200Hz): 虚拟车推进 + LQR + LADRC → 控制量
 static void tracking_layer_step(CarState *vst, CarState *car, ActuatorCmd *cmd);
 
+// 5 状态观测 (1kHz): x,y,theta,v 来自 INS + 编码器; delta = 上周期舵机指令 (跟踪良好)
+static void car_state_observe(CarState *car, const SensorData *s, f32 delta_cmd);
+
 // 执行层 (200Hz)
 static void actuators_apply(const ActuatorCmd *cmd);
 
@@ -62,7 +66,7 @@ static void task_10hz_debug(void);
 static void task_1hz_heartbeat(void);
 //===================================================层入口声明===================================================
 
-//===================================================传感器→估计 实现===================================================
+//===================================================传感器→观测 实现===================================================
 
 static void sensors_read(SensorData *s) {
     Encoder enc; hal_encoder_get(&enc);
@@ -70,10 +74,12 @@ static void sensors_read(SensorData *s) {
     s->enc_r = enc.right;
 }
 
-static void state_estimate(CarState *car, const SensorData *s) {
+// 5 状态集中观测: x,y,theta,v (INS+编码器) + delta (上周期舵机指令, 跟踪良好假设)
+static void car_state_observe(CarState *car, const SensorData *s, f32 delta_cmd) {
     f32 vl = s->enc_l * INV_ISR_DT;
     f32 vr = s->enc_r * INV_ISR_DT;
-    ins_update_odom(car, vl, vr, ISR_DT);
+    ins_update_odom(car, vl, vr, ISR_DT);  // v, theta, x, y
+    car->delta = delta_cmd;                // 舵机跟踪良好 → 真值=指令
 }
 
 //===================================================跟踪层 实现===================================================
@@ -142,18 +148,18 @@ void tasks_init(void) {
 
 //===================================================ISR 控制===================================================
 
-// 1kHz: 传感器→估计 (每次) + 跟踪层→执行层 (每 5 次, 200Hz)
+// 1kHz: 传感器 + 5状态观测 (每次) + 跟踪层→执行层 (每 5 次, 200Hz)
 void car_control_update(void) {
     if (!g_ready) return;
 
-    sensors_read(&g_sens);                    // ── 传感器 ──
-    state_estimate(&g_car, &g_sens);          // ── 状态估计 ──
+    sensors_read(&g_sens);                                          // ── 传感器 ──
+    car_state_observe(&g_car, &g_sens, g_cmd.servo_delta);         // ── 5状态观测 (delta=上周期指令) ──
 
     static u8 trk_div = 0;
     if (++trk_div >= 5) {
         trk_div = 0;
-        tracking_layer_step(&g_vst, &g_car, &g_cmd);  // ── 跟踪层 (200Hz) ──
-        actuators_apply(&g_cmd);                       // ── 执行层 ──
+        tracking_layer_step(&g_vst, &g_car, &g_cmd);               // ── 跟踪层 (200Hz) ──
+        actuators_apply(&g_cmd);                                    // ── 执行层 ──
     }
 }
 
