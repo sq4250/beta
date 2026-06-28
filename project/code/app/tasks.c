@@ -77,7 +77,7 @@ static void sensors_read(SensorData *s, ImuHandle imu) {
 static void car_state_observe(CarState *car, const SensorData *s, f32 delta_cmd) {
     f32 vl = s->enc_l * INV_ISR_DT;
     f32 vr = s->enc_r * INV_ISR_DT;
-    ins_update_yaw(s->gyro[2], s->quat, s->has_quat);  // IMU 偏航融合 (数据来自 s)
+    ins_fuse_theta(s->gyro[2], s->quat, s->has_quat);  // 陀螺+四元数 → theta
     ins_update_odom(car, vl, vr, ISR_DT);               // v, theta, x, y
     car->delta = delta_cmd;                             // 舵机跟踪良好 → 真值=指令
 }
