@@ -45,10 +45,15 @@ typedef double              f64;
 #define RAD2DEG  57.2957795f    // = 180/π
 
 //===================================================管道数据协议===================================================
-// 传感器采样数据 (sensors_read → state_estimate)
+// 传感器采样数据 (sensors_read → car_state_observe)
 typedef struct {
-    f32 enc_l;               // 左编码器位移增量 [m] (已乘标定系数)
+    // 编码器
+    f32 enc_l;               // 左编码器位移增量 [m]
     f32 enc_r;               // 右编码器位移增量 [m]
+    // IMU
+    f32 gyro[3];             // 陀螺三轴 [rad/s] (已去 bias)
+    f32 quat[4];             // 四元数 [w,x,y,z]
+    bool has_quat;           // 四元数是否有效
 } SensorData;
 
 // 执行器指令 (跟踪层 → 执行层)

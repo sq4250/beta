@@ -47,8 +47,8 @@ static const Waypoint g_waypoints[] = {
 //===================================================航点===================================================
 
 //===================================================层入口声明===================================================
-static void sensors_read(SensorData *s);
-static void car_state_observe(CarState *car, const SensorData *s, ImuHandle imu, f32 delta_cmd);
+static void sensors_read(SensorData *s, ImuHandle imu);
+static void car_state_observe(CarState *car, const SensorData *s, f32 delta_cmd);
 static void tracking_layer_step(CarState *vst, CarState *car, ActuatorCmd *cmd);
 static void actuators_apply(const ActuatorCmd *cmd);
 
@@ -63,19 +63,23 @@ static void task_1hz_heartbeat(void);
 
 //===================================================传感器→观测 实现===================================================
 
-static void sensors_read(SensorData *s) {
+// 读取全部传感器 → SensorData
+static void sensors_read(SensorData *s, ImuHandle imu) {
     Encoder enc; hal_encoder_get(&enc);
     s->enc_l = enc.left;
     s->enc_r = enc.right;
+    hal_imu_read_gyro(s->gyro, imu);
+    s->has_quat = hal_imu_has_quat(imu);
+    if (s->has_quat) hal_imu_read_quat(s->quat, imu);
 }
 
-// 5 状态集中观测: 所有输入来自参数, 无隐藏依赖
-static void car_state_observe(CarState *car, const SensorData *s, ImuHandle imu, f32 delta_cmd) {
+// 5 状态集中观测: 所有输入来自参数, 纯计算, 不访问硬件
+static void car_state_observe(CarState *car, const SensorData *s, f32 delta_cmd) {
     f32 vl = s->enc_l * INV_ISR_DT;
     f32 vr = s->enc_r * INV_ISR_DT;
-    ins_update_yaw(imu);                   // IMU 偏航融合 (gyro + quat)
-    ins_update_odom(car, vl, vr, ISR_DT);  // v, theta, x, y
-    car->delta = delta_cmd;                // 舵机跟踪良好 → 真值=指令
+    ins_update_yaw(s->gyro[2], s->quat, s->has_quat);  // IMU 偏航融合 (数据来自 s)
+    ins_update_odom(car, vl, vr, ISR_DT);               // v, theta, x, y
+    car->delta = delta_cmd;                             // 舵机跟踪良好 → 真值=指令
 }
 
 //===================================================跟踪层 实现===================================================
@@ -148,8 +152,8 @@ void tasks_init(void) {
 void car_control_update(void) {
     if (!g_ready) return;
 
-    sensors_read(&g_sens);                                          // ── 传感器 (1kHz) ──
-    car_state_observe(&g_car, &g_sens, g_imu, g_cmd.servo_delta);  // ── 5状态观测 (1kHz, 含IMU偏航) ──
+    sensors_read(&g_sens, g_imu);                                  // ── 传感器 (1kHz) ──
+    car_state_observe(&g_car, &g_sens, g_cmd.servo_delta);         // ── 5状态观测 (1kHz) ──
 
     static u8 div200 = 0;                                           // 200Hz 分频
     if (++div200 >= 5) {
