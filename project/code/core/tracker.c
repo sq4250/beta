@@ -1,5 +1,5 @@
 /**
- * tracker.c — LQR 横向跟踪器 (300Hz)
+ * tracker.c — LQR 横向跟踪器 (200Hz)
  */
 
 #include "tracker.h"
@@ -39,7 +39,7 @@ void tracker_lqr_gains(f32 g[5], f32 v) {
     }
 }
 
-f32 tracker_step(CarState *rs, const CarState *vst, f32 omega_ff) {
+f32 tracker_step(const CarState *rs, const CarState *vst, f32 omega_ff) {
     f32 ct = cosf(vst->theta), st = sinf(vst->theta);
     g_ex = (vst->x - rs->x) * ct + (vst->y - rs->y) * st;
     f32 e_y = -(rs->x - vst->x) * st + (rs->y - vst->y) * ct;

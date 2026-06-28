@@ -20,14 +20,4 @@ typedef struct {
     f32 x, y;
 } Waypoint;
 
-// 参考轨迹点
-typedef struct {
-    f32 x, y, theta, v, delta;
-} PlannerRef;
-
-// LQR 增益集 (4个CARE原始值)
-typedef struct {
-    f32 k[4];           // [K_e_y, K_e_theta, K_e_theta_dot, K_delta]
-} LqrRaw;
-
 #endif

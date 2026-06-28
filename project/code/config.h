@@ -20,36 +20,16 @@
 #define SERVO_PERIOD_US     5000u       // = 1e6/SERVO_FREQ_HZ (200Hz周期)
 #define SERVO_DUTY_PER_US   2.0f        // = SERVO_PWM_DUTY_MAX/SERVO_PERIOD_US (pulse[μs]→duty)
 // 脉宽 → 占空比: duty = pulse_us * SERVO_DUTY_PER_US
-#define SERVO_MIN_US         500
 #define SERVO_CTR_US        1500
-#define SERVO_MAX_US        2500
-#define SERVO_ANGLE_MAX_DEG  180        // 舵机物理最大角度 (参考)
-#define SERVO_ANGLE_CTR_DEG   90        // 舵机物理中位角度 (参考)
+#define SERVO_ANGLE_MAX_DEG  180        // 舵机物理最大角度 (参考, 用于推导 SERVO_RAD_MAX)
+#define SERVO_ANGLE_CTR_DEG   90        // 舵机物理中位角度 (参考, 用于推导 SERVO_RAD_MAX)
 #define STEERING_RATIO        2.0f      // 前轮/舵机 = 2:1 (舵机转1°→前轮转2°)
-#define INV_STEERING_RATIO   0.5f         // = 1/2 (乘逆元)
+#define INV_STEERING_RATIO   0.5f       // = 1/2
 
-// 舵机弧度范围 (预计算, 运行时直接 rad→pulse, 无 deg 中间量)
 #define SERVO_RAD_MAX       1.57079633f   // = π/2 (舵机最大转角 rad, =90°*DEG2RAD)
 #define SERVO_US_PER_RAD    636.61977f   // = 1000/(π/2) μs/rad (舵机脉宽-弧度斜率)
-
-// 舵机引脚 (占位, 根据实际硬件修改)
 #define SERVO_TCPWM_CH       TCPWM_CH00_P06_1
 //===================================================舵机 PWM===================================================
-
-//===================================================电机 PWM===================================================
-#define MOTOR_FREQ_HZ     20000
-#define MOTOR_LEFT_CH       TCPWM_CH06_P02_1
-#define MOTOR_RIGHT_CH      TCPWM_CH07_P02_0
-//===================================================电机 PWM===================================================
-
-//===================================================编码器===================================================
-#define ENCODER_LEFT_CH     0
-#define ENCODER_LEFT_CH1    P02_3
-#define ENCODER_LEFT_CH2    P02_4
-#define ENCODER_RIGHT_CH    1
-#define ENCODER_RIGHT_CH1   P03_0
-#define ENCODER_RIGHT_CH2   P03_1
-//===================================================编码器===================================================
 
 //===================================================IMU 标定===================================================
 #define IMU_BIAS_TOTAL      400         // 总采样数
@@ -63,14 +43,10 @@
 //===================================================IMU 标定===================================================
 
 //===================================================控制器频率===================================================
-#define PLANNER_FREQ       20           // NN 规划器 Hz
 #define TRACKER_FREQ       200          // LQR+PWM 频率 Hz (1k/5, 同步无相差)
-#define CTRL_DT            0.005f       // = 1/200 (5ms, 前轮转角积分步长)
-#define OUTER_DT           0.05f        // = 1/20  (50ms, 规划周期)
-#define SUB_STEPS          10           // 200/20 = 10 (整数子步)
+#define CTRL_DT            0.005f       // = 1/200 (5ms)
 #define ISR_DT             0.001f       // 1kHz PIT 中断周期
-#define INV_ISR_DT         1000.0f       // = 1/ISR_DT (速度计算: 位移*频率)
-#define SENSE_DT           0.01f        // 100Hz 感知更新周期
+#define INV_ISR_DT         1000.0f      // = 1/ISR_DT (速度计算: 位移*频率)
 //===================================================控制器频率===================================================
 
 //===================================================Planner===================================================

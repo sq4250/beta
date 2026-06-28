@@ -4,7 +4,6 @@
 #include "planner.h"
 #include "nn_inference.h"
 #include "kinematics.h"
-#include <string.h>
 
 static f32 g_nn_a     = 0.0f;
 static f32 g_nn_omega = 0.0f;
