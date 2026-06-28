@@ -47,15 +47,10 @@ static const Waypoint g_waypoints[] = {
 //===================================================航点===================================================
 
 //===================================================层入口声明===================================================
-// 传感器→估计 (1kHz)
 static void sensors_read(SensorData *s);
-static void state_estimate(CarState *car, const SensorData *s);
-
-// 跟踪层 (200Hz): 虚拟车推进 + LQR + LADRC → 控制量
+static void car_state_observe(CarState *car, const SensorData *s, ImuHandle imu, f32 delta_cmd);
 static void tracking_layer_step(CarState *vst, CarState *car, ActuatorCmd *cmd);
-
-// 5 状态观测 (1kHz): x,y,theta,v 来自 INS + 编码器; delta = 上周期舵机指令 (跟踪良好)
-static void car_state_observe(CarState *car, const SensorData *s, f32 delta_cmd);
+static void actuators_apply(const ActuatorCmd *cmd);
 
 // 执行层 (200Hz)
 static void actuators_apply(const ActuatorCmd *cmd);
@@ -74,11 +69,11 @@ static void sensors_read(SensorData *s) {
     s->enc_r = enc.right;
 }
 
-// 5 状态集中观测: x,y,theta,v (IMU + 编码器) + delta (上周期舵机指令)
-static void car_state_observe(CarState *car, const SensorData *s, f32 delta_cmd) {
+// 5 状态集中观测: 所有输入来自参数, 无隐藏依赖
+static void car_state_observe(CarState *car, const SensorData *s, ImuHandle imu, f32 delta_cmd) {
     f32 vl = s->enc_l * INV_ISR_DT;
     f32 vr = s->enc_r * INV_ISR_DT;
-    ins_update_yaw(g_imu);                 // IMU 偏航融合 (gyro + quat)
+    ins_update_yaw(imu);                   // IMU 偏航融合 (gyro + quat)
     ins_update_odom(car, vl, vr, ISR_DT);  // v, theta, x, y
     car->delta = delta_cmd;                // 舵机跟踪良好 → 真值=指令
 }
@@ -154,7 +149,7 @@ void car_control_update(void) {
     if (!g_ready) return;
 
     sensors_read(&g_sens);                                          // ── 传感器 (1kHz) ──
-    car_state_observe(&g_car, &g_sens, g_cmd.servo_delta);         // ── 5状态观测 (1kHz, 含IMU偏航) ──
+    car_state_observe(&g_car, &g_sens, g_imu, g_cmd.servo_delta);  // ── 5状态观测 (1kHz, 含IMU偏航) ──
 
     static u8 div200 = 0;                                           // 200Hz 分频
     if (++div200 >= 5) {
