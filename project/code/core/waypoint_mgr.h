@@ -46,7 +46,4 @@ bool waypoint_mgr_check_hit(const f32 prev[2], const f32 next[2]);
 
 // 到达总数
 u32 waypoint_mgr_reached_count(void);
-// 全部到达?
-bool waypoint_mgr_all_done(void);
-
 #endif

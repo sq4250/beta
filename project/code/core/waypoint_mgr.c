@@ -49,4 +49,3 @@ u32 waypoint_mgr_reached_count(void) {
     return n;
 }
 
-bool waypoint_mgr_all_done(void) { return g_wp_idx >= g_wp_count; }
