@@ -4,7 +4,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 #include "common.h"
-#include "core/car_state.h"
+#include "config.h"
 #include <math.h>
 
 #define clamp(x, lo, hi)  ((x) < (lo) ? (lo) : ((x) > (hi) ? (hi) : (x)))
