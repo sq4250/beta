@@ -86,13 +86,20 @@ nn_a=nn_omg=0.
 z1=0.; fh=0.; up=0.  # LADRC state
 ey_log=[]; ex_log=[]
 
+vst_prev_seg = vst[:2].copy()  # 上周期起点 (与C一致)
+
 for ctrl in range(int(12/DT_OUTER)):
     t=ctrl*DT_OUTER
+    # ① 检测上一周期虚拟轨迹是否穿过航点 (与C一致)
+    if wpi<len(WP) and not reached[wpi] and check_hit_substep(vst_prev_seg, vst[:2], WP[wpi], TOL):
+        reached[wpi]=True; wpi+=1; print(f'  WP{wpi-1} @t={t:.2f}s')
     while wpi<len(WP) and reached[wpi]: wpi+=1
     if wpi>=len(WP): break
+    # ② 获取窗口 + NN前向
     ci=wpi; Nw=len(WP); ni=min(ci+1,Nw-1); n2i=min(ci+2,Nw-1)
     inp=bf8(vst,WP[ci],WP[ni],WP[n2i]); nn_a,nn_omg=nn(inp)
-    vst_prev=vst[:2].copy()
+    # ③ 记本周期起点
+    vst_prev_seg = vst[:2].copy()
 
     for sc in range(SUB):
         vst=mcu_step(vst,np.array([nn_a,nn_omg]))
@@ -129,9 +136,6 @@ for ctrl in range(int(12/DT_OUTER)):
 
         ey_log.append(ey); ex_log.append(ex)
 
-    if not reached[ci] and check_hit_substep(vst_prev,vst[:2],WP[ci],TOL):
-        reached[ci]=True; print(f'  WP{ci} @t={t:.2f}s')
-
 eya=np.array(ey_log); exa=np.array(ex_log)
 print(f'eyRMS={np.sqrt(np.mean(eya**2)):.4f}m  exRMS={np.sqrt(np.mean(exa**2)):.4f}m  wps={sum(reached)}')
 print(f'LADRC: alpha={ALPHA} b0={B0} wo={WO} kp={KP} kd={KD}')
@@ -143,12 +147,15 @@ fvx=[];fvy=[];frx=[];fry=[];fey=[];fex=[]
 vst2=np.zeros(5,dtype=np.float32); rs2=np.zeros(5,dtype=np.float32)
 wpi2=0; reached2=np.zeros(len(WP),bool)
 nn_a2=nn_omg2=0.; z12=0.; fh2=0.; up2=0.
+vst_prev_seg2 = vst2[:2].copy()
 for ctrl in range(int(12/DT_OUTER)):
+    if wpi2<len(WP) and not reached2[wpi2] and check_hit_substep(vst_prev_seg2, vst2[:2], WP[wpi2], TOL):
+        reached2[wpi2]=True; wpi2+=1
     while wpi2<len(WP) and reached2[wpi2]: wpi2+=1
     if wpi2>=len(WP): break
     ci2=wpi2; Nw2=len(WP); ni2=min(ci2+1,Nw2-1); n2i2=min(ci2+2,Nw2-1)
     inp2=bf8(vst2,WP[ci2],WP[ni2],WP[n2i2]); nn_a2,nn_omg2=nn(inp2)
-    vst_prev2=vst2[:2].copy()
+    vst_prev_seg2 = vst2[:2].copy()
     for sc in range(SUB):
         vst2=mcu_step(vst2,np.array([nn_a2,nn_omg2]))
         ct2=np.cos(vst2[2]); st2=np.sin(vst2[2])
@@ -167,8 +174,6 @@ for ctrl in range(int(12/DT_OUTER)):
     fvx.append(vst2[0]);fvy.append(vst2[1]);frx.append(rs2[0]);fry.append(rs2[1])
     fey.append(-(rs2[0]-vst2[0])*np.sin(vst2[2])+(rs2[1]-vst2[1])*np.cos(vst2[2]))
     fex.append((vst2[0]-rs2[0])*np.cos(vst2[2])+(vst2[1]-rs2[1])*np.sin(vst2[2]))
-    if not reached2[ci2] and check_hit_substep(vst_prev2,vst2[:2],WP[ci2],TOL):
-        reached2[ci2]=True
 
 fvx=np.array(fvx);fvy=np.array(fvy);frx=np.array(frx);fry=np.array(fry)
 fey=np.array(fey);fex=np.array(fex); ft2=np.linspace(0,len(fvx)*DT_OUTER,len(fvx))
