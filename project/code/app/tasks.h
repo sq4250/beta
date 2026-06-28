@@ -20,7 +20,6 @@ typedef struct {
 extern Task tasks[TASK_NUM];
 
 void tasks_init(void);
-void car_control_update(void);         // 1kHz ISR: 传感器 + 跟踪器 + PWM
-void car_sense_update(void);           // 100Hz ISR: IMU融合 + 里程计
+void car_control_update(void);         // 1kHz ISR: 状态观测(1k) + 偏航融合(100Hz) + 跟踪+执行(200Hz)
 
 #endif

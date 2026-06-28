@@ -148,25 +148,27 @@ void tasks_init(void) {
 
 //===================================================ISR 控制===================================================
 
-// 1kHz: 传感器 + 5状态观测 (每次) + 跟踪层→执行层 (每 5 次, 200Hz)
+// 1kHz: 传感器 + 5状态观测 (每次)
+//       + 偏航融合 (每10次, 100Hz)
+//       + 跟踪层→执行层 (每5次, 200Hz)
 void car_control_update(void) {
     if (!g_ready) return;
 
-    sensors_read(&g_sens);                                          // ── 传感器 ──
-    car_state_observe(&g_car, &g_sens, g_cmd.servo_delta);         // ── 5状态观测 (delta=上周期指令) ──
+    sensors_read(&g_sens);                                          // ── 传感器 (1kHz) ──
+    car_state_observe(&g_car, &g_sens, g_cmd.servo_delta);         // ── 5状态观测 (1kHz) ──
 
-    static u8 trk_div = 0;
-    if (++trk_div >= 5) {
-        trk_div = 0;
-        tracking_layer_step(&g_vst, &g_car, &g_cmd);               // ── 跟踪层 (200Hz) ──
-        actuators_apply(&g_cmd);                                    // ── 执行层 ──
+    static u8 div100 = 0;                                           // 100Hz 分频
+    if (++div100 >= 10) {
+        div100 = 0;
+        ins_update_yaw(g_imu);                                      // ── 偏航融合 (100Hz) ──
     }
-}
 
-// 100Hz: 偏航融合
-void car_sense_update(void) {
-    if (!g_ready) return;
-    ins_update_yaw(g_imu);
+    static u8 div200 = 0;                                           // 200Hz 分频
+    if (++div200 >= 5) {
+        div200 = 0;
+        tracking_layer_step(&g_vst, &g_car, &g_cmd);               // ── 跟踪层 (200Hz) ──
+        actuators_apply(&g_cmd);                                    // ── 执行层 (200Hz) ──
+    }
 }
 
 //===================================================主循环任务===================================================

@@ -54,24 +54,13 @@ void pit0_ch0_isr()                     // 定时器通道 0 周期中断服务�
 // 返回参数     void
 // 使用示例     硬件自动触发，无需手动调用
 // 备注信息     系统核心中断：
-//              1. 100Hz 分频 → car_sense_update() 感知/通信
-//              2. 1kHz → car_control_update() 控制律
-//              3. hal_tick_callback() tick 计数 → 驱动调度器
+//              1. 1kHz → car_control_update() 控制律 (内含100Hz偏航+200Hz跟踪)
+//              2. hal_tick_callback() tick 计数 → 驱动调度器
 //              保持 ISR 总执行时间 << 1ms
 //-------------------------------------------------------------------------------------------------------------------
 void pit0_ch1_isr() {                   // 定时器通道 1 周期中断服务函数 (1kHz 系统心跳)
     pit_isr_flag_clear(PIT_CH1);
-
-    /* 100Hz 分频：感知/通信 (先执行，供控制使用新鲜数据) */
-    {
-        static u8 sense_div;
-        if (++sense_div >= 10) {
-            sense_div = 0;
-            car_sense_update();
-        }
-    }
-
-    car_control_update();               /* 1kHz: 硬实时控制 */
+    car_control_update();               /* 1kHz: 状态观测+偏航融合+跟踪+执行 */
     hal_tick_callback();                /* tick 计数 → 驱动调度器 */
 }
 
