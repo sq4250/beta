@@ -74,10 +74,11 @@ static void sensors_read(SensorData *s) {
     s->enc_r = enc.right;
 }
 
-// 5 状态集中观测: x,y,theta,v (INS+编码器) + delta (上周期舵机指令, 跟踪良好假设)
+// 5 状态集中观测: x,y,theta,v (IMU + 编码器) + delta (上周期舵机指令)
 static void car_state_observe(CarState *car, const SensorData *s, f32 delta_cmd) {
     f32 vl = s->enc_l * INV_ISR_DT;
     f32 vr = s->enc_r * INV_ISR_DT;
+    ins_update_yaw(g_imu);                 // IMU 偏航融合 (gyro + quat)
     ins_update_odom(car, vl, vr, ISR_DT);  // v, theta, x, y
     car->delta = delta_cmd;                // 舵机跟踪良好 → 真值=指令
 }
@@ -148,20 +149,12 @@ void tasks_init(void) {
 
 //===================================================ISR 控制===================================================
 
-// 1kHz: 传感器 + 5状态观测 (每次)
-//       + 偏航融合 (每10次, 100Hz)
-//       + 跟踪层→执行层 (每5次, 200Hz)
+// 1kHz: 传感器 + 5状态观测 (每次) + 跟踪层→执行层 (每5次, 200Hz)
 void car_control_update(void) {
     if (!g_ready) return;
 
     sensors_read(&g_sens);                                          // ── 传感器 (1kHz) ──
-    car_state_observe(&g_car, &g_sens, g_cmd.servo_delta);         // ── 5状态观测 (1kHz) ──
-
-    static u8 div100 = 0;                                           // 100Hz 分频
-    if (++div100 >= 10) {
-        div100 = 0;
-        ins_update_yaw(g_imu);                                      // ── 偏航融合 (100Hz) ──
-    }
+    car_state_observe(&g_car, &g_sens, g_cmd.servo_delta);         // ── 5状态观测 (1kHz, 含IMU偏航) ──
 
     static u8 div200 = 0;                                           // 200Hz 分频
     if (++div200 >= 5) {
