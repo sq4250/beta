@@ -20,7 +20,7 @@ from bicycle_model import BicycleParams, check_hit_substep
 
 # ============================================================
 p = BicycleParams(); L = p.wheelbase
-DT = 1/300; DT_OUTER = 0.05; SUB = 15
+DT = 1/200; DT_OUTER = 0.05; SUB = 10  # 200Hz, 与 C 一致
 TOL = 0.05
 
 # LQR (横向)
