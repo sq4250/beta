@@ -2,11 +2,11 @@
  * hal_servo.c — 前轮转向舵机 (200Hz PWM)
  */
 #include "hal_servo.h"
+#include "config.h"
 #include "zf_common_headfile.h"
 #include "utils.h"
 
-static u8  g_init = 0;
-static f32 g_inv_steering_ratio = 0.5f;  // 前轮→舵机: delta * 0.5 = srad (舵机1°↔前轮2°)
+static u8 g_init = 0;
 
 void hal_servo_init(void) {
     if (g_init) return; g_init = 1;
@@ -15,7 +15,7 @@ void hal_servo_init(void) {
 }
 
 void hal_servo_set_delta(f32 delta) {
-    f32 srad  = delta * g_inv_steering_ratio;
+    f32 srad  = delta * INV_STEERING_RATIO;
     srad      = clamp(srad, -SERVO_RAD_MAX, SERVO_RAD_MAX);
     f32 pulse = (f32)SERVO_CTR_US + srad * SERVO_US_PER_RAD;
     u32 duty  = (u32)(pulse * SERVO_DUTY_PER_US);

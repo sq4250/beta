@@ -1,7 +1,7 @@
 /**
  * hal_servo.h — 前轮转向舵机 PWM 驱动
  *
- * 映射: delta[rad] → srad=delta*g_inv_ratio → pulse=CTR+srad*US_PER_RAD → duty*DUTY_PER_US
+ * 映射: delta[rad] → srad=delta*INV_RATIO → pulse=CTR+srad*US_PER_RAD → duty*DUTY_PER_US
  */
 
 #ifndef HAL_SERVO_H
