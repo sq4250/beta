@@ -21,11 +21,9 @@ void ins_update_yaw(f32 gyro_z, const f32 quat[4], bool has_quat) {
     }
 }
 
-f32 ins_yaw(void) { return g_yaw; }
-
 void ins_update_odom(CarState *car, f32 vl, f32 vr, f32 dt) {
     car->v = (vl + vr) * 0.5f;
-    car->theta = ins_yaw();
+    car->theta = g_yaw;
     car->x += car->v * cosf(car->theta) * dt;
     car->y += car->v * sinf(car->theta) * dt;
 }
