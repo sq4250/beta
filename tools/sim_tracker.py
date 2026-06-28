@@ -92,7 +92,9 @@ for ctrl in range(int(12/DT_OUTER)):
     t=ctrl*DT_OUTER
     # ① 检测上一周期虚拟轨迹是否穿过航点 (与C一致)
     if wpi<len(WP) and not reached[wpi] and check_hit_substep(vst_prev_seg, vst[:2], WP[wpi], TOL):
-        reached[wpi]=True; wpi+=1; print(f'  WP{wpi-1} @t={t:.2f}s')
+        d = np.hypot(rs[0]-WP[wpi][0], rs[1]-WP[wpi][1])
+        reached[wpi]=True; wpi+=1
+        print(f'  WP{wpi-1} @t={t:.2f}s  real_dist={d:.3f}m')
     while wpi<len(WP) and reached[wpi]: wpi+=1
     if wpi>=len(WP): break
     # ② 获取窗口 + NN前向
