@@ -1,30 +1,26 @@
 /**
  * hal_servo.h — 前轮转向舵机 PWM 驱动
  *
- * 映射: delta[rad] → srad=delta/ratio → pulse=1500+srad*US_PER_RAD → duty (200Hz)
+ * 映射: delta[rad] → srad=delta*g_inv_ratio → pulse=CTR+srad*US_PER_RAD → duty*DUTY_PER_US
  */
 
 #ifndef HAL_SERVO_H
 #define HAL_SERVO_H
 
-#include "config.h"
+#include "common.h"
 
-//-------------------------------------------------------------------------------------------------------------------
-// 函数简介     舵机初始化
-// 参数说明     void
-// 返回参数     void
-// 使用示例     hal_servo_init();
-// 备注信息     设置 PWM 频率 200Hz, 初始位置居中 (delta=0)
-//-------------------------------------------------------------------------------------------------------------------
+//===================================================舵机硬件常数===================================================
+#define SERVO_FREQ_HZ       200
+#define SERVO_PWM_DUTY_MAX  10000       // zf_driver 满量程
+#define SERVO_PERIOD_US     5000u       // = 1e6/SERVO_FREQ_HZ
+#define SERVO_DUTY_PER_US   2.0f        // = PWM_DUTY_MAX/PERIOD_US (pulse[μs]→duty)
+#define SERVO_CTR_US        1500
+#define SERVO_RAD_MAX       1.57079633f // = π/2 (舵机最大转角 rad)
+#define SERVO_US_PER_RAD    636.61977f  // = (MAX_US-CTR_US)/SERVO_RAD_MAX
+#define SERVO_TCPWM_CH      TCPWM_CH00_P06_1
+//===================================================舵机硬件常数===================================================
+
 void hal_servo_init(void);
-
-//-------------------------------------------------------------------------------------------------------------------
-// 函数简介     设置前轮转角
-// 参数说明     delta       前轮转角 [rad], 0=直行
-// 返回参数     void
-// 使用示例     hal_servo_set_delta(0.1f);  // 左转 ~0.1rad
-// 备注信息     自动映射: delta→servo_deg→pulse→duty, 自动限幅
-//-------------------------------------------------------------------------------------------------------------------
 void hal_servo_set_delta(f32 delta);
 
 #endif
