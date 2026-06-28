@@ -1,0 +1,62 @@
+/**
+ * hal_imu.c — IMU 工厂 + 标定
+ *
+ * 标定: 前N样本递推平均, 后续 EMA
+ *       运动中加速度超限/陀螺超阈值 → 跳过该样本
+ */
+#include "hal_imu.h"
+#include <math.h>
+#include <stdlib.h>
+#include "system_cyt2bl.h"
+#include "config.h"
+
+struct ImuHandle_ {
+    const ImuDriver *drv;
+    f32 acc_factor, gyro_factor;
+    f32 bias_gz;
+};
+
+ImuHandle hal_imu_create(const ImuDriver *drv) {
+    ImuHandle h = malloc(sizeof(*h));
+    h->drv = drv;
+
+    f32 acc_scale, gyro_scale;
+    if (!drv->init(&acc_scale, &gyro_scale)) { free(h); return NULL; }
+    h->acc_factor  = 1.0f / acc_scale;
+    h->gyro_factor = 1.0f / gyro_scale;
+
+    f32 bias = 0.0f;
+    u32 step = 0;
+    while (step < (u32)IMU_BIAS_TOTAL) {
+        system_delay_ms(1);
+        i16 g_raw[3], a_raw[3]; drv->read_raw(g_raw, a_raw);
+        f32 ax = (f32)a_raw[0]*h->acc_factor, ay = (f32)a_raw[1]*h->acc_factor, az = (f32)a_raw[2]*h->acc_factor;
+        f32 acc_norm = sqrtf(ax*ax + ay*ay + az*az);
+        if (acc_norm > IMU_ACC_NORM_MAX || acc_norm < IMU_ACC_NORM_MIN) continue;
+        if (abs(g_raw[0]) > IMU_MOTION_THR || abs(g_raw[1]) > IMU_MOTION_THR || abs(g_raw[2]) > IMU_MOTION_THR) continue;
+        ++step;
+        f32 gz = (f32)g_raw[2] * h->gyro_factor;
+        if (step <= IMU_BIAS_FAST) bias += (gz - bias) / (f32)step;
+        else                       bias += IMU_BIAS_ALPHA * (gz - bias);
+    }
+    h->bias_gz = bias;
+    return h;
+}
+
+void hal_imu_destroy(ImuHandle h) { free(h); }
+
+void hal_imu_read_gyro(f32 g[3], ImuHandle h) {
+    i16 raw[3], a[3]; h->drv->read_raw(raw, a);
+    g[0] = (f32)raw[0] * h->gyro_factor * DEG2RAD;
+    g[1] = (f32)raw[1] * h->gyro_factor * DEG2RAD;
+    g[2] = ((f32)raw[2] * h->gyro_factor - h->bias_gz) * DEG2RAD;
+}
+void hal_imu_read_accel(f32 a[3], ImuHandle h) {
+    i16 g[3], raw[3]; h->drv->read_raw(g, raw);
+    a[0] = (f32)raw[0] * h->acc_factor;
+    a[1] = (f32)raw[1] * h->acc_factor;
+    a[2] = (f32)raw[2] * h->acc_factor;
+}
+bool hal_imu_has_quat(ImuHandle h)       { return h->drv->has_quat(); }
+void hal_imu_read_quat(f32 q[4], ImuHandle h) { h->drv->read_quat(q); }
+f32  hal_imu_gyro_bias_z(ImuHandle h)    { return h->bias_gz; }

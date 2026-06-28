@@ -1,0 +1,24 @@
+# IAR 编译产物
+Debug/
+Release/
+*.o
+*.out
+*.pbi
+*.dbgdt
+*.ewt
+*.ewx
+*.sim
+*.bak
+
+# Python
+__pycache__/
+*.pyc
+
+# 仿真输出
+*.gif
+
+# Claude Code
+.claude/
+
+# 临时文件
+project/iar/删除临时文件IAR.bat
