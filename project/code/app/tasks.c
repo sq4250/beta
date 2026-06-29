@@ -35,8 +35,8 @@ static ImuData     g_imu_data;
 static ActuatorCmd g_cmd;
 static CarState    g_vst_prev;      // 上周期虚拟车起点 (航点线段检测, 复用 CarState)
 static PlannerAction g_plan;         // NN 动作 ZOH (20Hz 更新)
-static f32         g_ex, g_ey;      // 横向跟踪误差
-static f32         g_omega_cmd;     // 横向转向指令
+static f32         g_ey;            // 横向误差 (遥测用)
+static f32         g_omega_cmd;     // 横向指令 (遥测用)
 static Encoder     g_enc_zoh;       // 编码器 ZOH
 static WaypointMgr g_wp_mgr;        // 航点管理 (调用方持有)
 static ImuHandle   g_imu;
@@ -53,7 +53,8 @@ static const Waypoint g_waypoints[] = {
 //===================================================层入口声明===================================================
 static void imu_read(ImuData *d, const ImuHandle imu);
 static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst, const CarState *car,
-                                 const PlannerAction *plan);
+                                 const PlannerAction *plan, f32 gyro_z,
+                                 f32 *omega_cmd, f32 *ey);
 static void actuators_apply(const ActuatorCmd *cmd);
 
 static void task_20hz_planner(void);
@@ -74,16 +75,16 @@ static void imu_read(ImuData *d, const ImuHandle imu) {
 // 更新 vst + cmd, 不写 car
 static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst,
                                 const CarState *car,
-                                const PlannerAction *plan
+                                const PlannerAction *plan, f32 gyro_z,
+                                f32 *omega_cmd, f32 *ey
     ) {
     mcu_kinematics_step(vst, plan->a, plan->omega);
 
-    f32 omega_cmd = lateral_step(car, vst, plan->omega, g_imu_data.gyro[2],
-                                  &g_ex, &g_ey);
-    g_omega_cmd = omega_cmd;
-    cmd->servo_delta = clamp(car->delta + omega_cmd * CTRL_DT, -DELTA_MAX, DELTA_MAX);
+    f32 e_x;
+    *omega_cmd = lateral_step(car, vst, plan->omega, gyro_z, &e_x, ey);
+    cmd->servo_delta = clamp(car->delta + *omega_cmd * CTRL_DT, -DELTA_MAX, DELTA_MAX);
     f32 thr_L, thr_R;
-    longitudinal_step(&thr_L, &thr_R, car->v, vst->v, plan->a, g_ex, car->delta);
+    longitudinal_step(&thr_L, &thr_R, car->v, vst->v, plan->a, e_x, car->delta);
     cmd->motor_l = thr_L;
     cmd->motor_r = thr_R;
 }
@@ -139,7 +140,10 @@ void car_control_update(void) {
 
     // ── 200Hz: 跟踪层 + 执行层 ──
     if (div200 == 0) {
-        tracking_layer_step(&g_cmd, &g_vst, &g_car, &g_plan);
+        f32 omg, ey;
+        tracking_layer_step(&g_cmd, &g_vst, &g_car, &g_plan,
+                            g_imu_data.gyro[2], &omg, &ey);
+        g_omega_cmd = omg; g_ey = ey;
         actuators_apply(&g_cmd);
     }
 }
