@@ -35,8 +35,6 @@ static ImuData     g_imu_data;
 static ActuatorCmd g_cmd;
 static CarState    g_vst_prev;      // 上周期虚拟车起点 (航点线段检测, 复用 CarState)
 static PlannerAction g_plan;         // NN 动作 ZOH (20Hz 更新)
-static f32         g_ey;            // 横向误差 (遥测用)
-static f32         g_omega_cmd;     // 横向指令 (遥测用)
 static Encoder     g_enc_zoh;       // 编码器 ZOH
 static WaypointMgr g_wp_mgr;        // 航点管理 (调用方持有)
 static ImuHandle   g_imu;
@@ -140,10 +138,8 @@ void car_control_update(void) {
 
     // ── 200Hz: 跟踪层 + 执行层 ──
     if (div200 == 0) {
-        f32 omg, ey;
         tracking_layer_step(&g_cmd, &g_vst, &g_car, &g_plan,
-                            g_imu_data.gyro[2], &omg, &ey);
-        g_omega_cmd = omg; g_ey = ey;
+                            g_imu_data.gyro[2], NULL, NULL);
         actuators_apply(&g_cmd);
     }
 }
@@ -162,9 +158,7 @@ static void task_20hz_planner(void) {
 
 static void task_10hz_debug(void) {
     u32 wp_done = waypoint_mgr_reached_count(&g_wp_mgr);
-    f32 ey = g_ey;
-    f32 omg = g_omega_cmd;
-    (void)wp_done; (void)ey; (void)omg;
+    (void)wp_done;
 }
 
 static void task_1hz_heartbeat(void) {
