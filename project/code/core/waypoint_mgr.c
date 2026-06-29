@@ -34,7 +34,7 @@ void waypoint_mgr_mark_reached(WaypointMgr *mgr) {
 
 bool waypoint_mgr_check_hit(const WaypointMgr *mgr, const CarState *prev, const CarState *next) {
     if (mgr->idx >= mgr->count || mgr->reached[mgr->idx]) return false;
-    Waypoint *t = &mgr->wps[mgr->idx];
+    const Waypoint *t = &mgr->wps[mgr->idx];
     return check_hit_substep(prev->x, prev->y, next->x, next->y, t->x, t->y, TOL_XY);
 }
 
