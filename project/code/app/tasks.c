@@ -35,7 +35,7 @@ static ImuData     g_imu_data;
 static ActuatorCmd g_cmd;
 static CarState    g_vst_prev;      // 上周期虚拟车起点 (航点线段检测, 复用 CarState)
 static PlannerAction g_plan;         // NN 动作 ZOH (20Hz 更新)
-static Encoder     g_enc_zoh;       // 编码器 ZOH
+static Encoder     g_enc;       // 编码器 ZOH
 static WaypointMgr g_wp_mgr;        // 航点管理 (调用方持有)
 static ImuHandle   g_imu;
 static bool        g_ready;
@@ -128,11 +128,11 @@ void car_control_update(void) {
     static u8 div200 = 0;
     if (++div200 >= 5) {
         div200 = 0;
-        hal_encoder_get(&g_enc_zoh);
+        hal_encoder_get(&g_enc);
     }
 
     // ── 1kHz: 状态估计 (测量 + 上周期控制量 → 5状态) ──
-    car_estimate_update(&g_car, &g_imu_data, &g_enc_zoh, &g_cmd);
+    car_estimate_update(&g_car, &g_imu_data, &g_enc, &g_cmd);
 
     // ── 200Hz: 跟踪层 + 执行层 ──
     if (div200 == 0) {
