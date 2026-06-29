@@ -49,7 +49,7 @@ static const Waypoint g_waypoints[] = {
 //===================================================层入口声明===================================================
 static void imu_read(ImuData *d, ImuHandle imu);
 static void imu_fuse(const ImuData *d);
-static void tracking_layer_step(CarState *vst, const CarState *car, ActuatorCmd *cmd);
+static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst, const CarState *car);
 static void actuators_apply(const ActuatorCmd *cmd);
 
 static void task_20hz_planner(void);
@@ -72,7 +72,7 @@ static void imu_fuse(const ImuData *d) {
 //===================================================跟踪层 (200Hz, 只读 car)===================================================
 
 // 更新 vst + cmd, 不写 car
-static void tracking_layer_step(CarState *vst, const CarState *car, ActuatorCmd *cmd) {
+static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst, const CarState *car) {
     f32 nn_a = planner_nn_a();
     f32 nn_o = planner_nn_omega();
     mcu_kinematics_step(vst, nn_a, nn_o);
@@ -148,7 +148,7 @@ void car_control_update(void) {
         g_car.delta = g_cmd.servo_delta;                            // δ = 上周期舵机指令
 
         // ── 200Hz: 跟踪层 (只读 car, 更新 vst + cmd) ──
-        tracking_layer_step(&g_vst, &g_car, &g_cmd);
+        tracking_layer_step(&g_cmd, &g_vst, &g_car);
         actuators_apply(&g_cmd);
     }
 }
