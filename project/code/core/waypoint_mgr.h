@@ -1,5 +1,5 @@
 /**
- * waypoint_mgr.h — 航点窗口管理 (20Hz)
+ * waypoint_mgr.h — 航点窗口管理 (调用方持有状态, 显式传递)
  */
 
 #ifndef WAYPOINT_MGR_H
@@ -8,42 +8,17 @@
 #include "car_state.h"
 #include "config.h"
 
-//-------------------------------------------------------------------------------------------------------------------
-// 函数简介     航点初始化
-// 参数说明     wps         航点数组
-// 参数说明     count       航点数量
-// 返回参数     void
-// 使用示例     waypoint_mgr_init(my_wps, 8);
-//-------------------------------------------------------------------------------------------------------------------
-void waypoint_mgr_init(const Waypoint *wps, u32 count);
+typedef struct {
+    Waypoint wps[MAX_WAYPOINTS];
+    u32      count;
+    u32      idx;                          // 当前目标索引
+    bool     reached[MAX_WAYPOINTS];
+} WaypointMgr;
 
-//-------------------------------------------------------------------------------------------------------------------
-// 函数简介     获取当前3航点窗口 (与pipeline一致)
-// 参数说明     g1          输出: 当前目标
-// 参数说明     g2          输出: 下一目标
-// 参数说明     g3          输出: 下下目标 (不足则填充最后一个)
-// 返回参数     bool        是否还有未到达航点
-// 使用示例     Waypoint g1,g2,g3; if (!waypoint_mgr_get_window(&g1,&g2,&g3)) { /* all done */ }
-//-------------------------------------------------------------------------------------------------------------------
-bool waypoint_mgr_get_window(Waypoint *g1, Waypoint *g2, Waypoint *g3);
+void waypoint_mgr_init(WaypointMgr *mgr, const Waypoint *wps, u32 count);
+bool waypoint_mgr_get_window(WaypointMgr *mgr, Waypoint *g1, Waypoint *g2, Waypoint *g3);
+void waypoint_mgr_mark_reached(WaypointMgr *mgr);
+bool waypoint_mgr_check_hit(WaypointMgr *mgr, const CarState *prev, const CarState *next);
+u32  waypoint_mgr_reached_count(const WaypointMgr *mgr);
 
-//-------------------------------------------------------------------------------------------------------------------
-// 函数简介     标记当前航点到达 (20Hz 线段法触发后调用)
-// 参数说明     void
-// 返回参数     void
-// 使用示例     waypoint_mgr_mark_reached();
-//-------------------------------------------------------------------------------------------------------------------
-void waypoint_mgr_mark_reached(void);
-
-//-------------------------------------------------------------------------------------------------------------------
-// 函数简介     检查线段是否经过当前航点 (20Hz, 与pipeline一致)
-// 参数说明     prev        周期起点 (x,y)
-// 参数说明     next        周期终点 (x,y)
-// 返回参数     bool        是否到达
-// 使用示例     if (waypoint_mgr_check_hit(vst_prev, vst_cur)) { waypoint_mgr_mark_reached(); }
-//-------------------------------------------------------------------------------------------------------------------
-bool waypoint_mgr_check_hit(const CarState *prev, const CarState *next);
-
-// 到达总数
-u32 waypoint_mgr_reached_count(void);
 #endif

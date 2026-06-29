@@ -5,47 +5,41 @@
 #include "utils.h"
 #include <string.h>
 
-static Waypoint g_waypoints[MAX_WAYPOINTS];
-static u32 g_wp_count = 0;
-static u32 g_wp_idx = 0;
-static bool g_reached[MAX_WAYPOINTS];
-
-void waypoint_mgr_init(const Waypoint *wps, u32 count) {
+void waypoint_mgr_init(WaypointMgr *mgr, const Waypoint *wps, u32 count) {
     if (count > MAX_WAYPOINTS) count = MAX_WAYPOINTS;
-    memcpy(g_waypoints, wps, count * sizeof(Waypoint));
-    g_wp_count = count;
-    g_wp_idx = 0;
-    for (u32 i = 0; i < MAX_WAYPOINTS; ++i) g_reached[i] = false;
+    memcpy(mgr->wps, wps, count * sizeof(Waypoint));
+    mgr->count = count;
+    mgr->idx   = 0;
+    for (u32 i = 0; i < MAX_WAYPOINTS; ++i) mgr->reached[i] = false;
 }
 
-bool waypoint_mgr_get_window(Waypoint *g1, Waypoint *g2, Waypoint *g3) {
-    while (g_wp_idx < g_wp_count && g_reached[g_wp_idx]) g_wp_idx++;
-    if (g_wp_idx >= g_wp_count) return false;
+bool waypoint_mgr_get_window(WaypointMgr *mgr, Waypoint *g1, Waypoint *g2, Waypoint *g3) {
+    while (mgr->idx < mgr->count && mgr->reached[mgr->idx]) mgr->idx++;
+    if (mgr->idx >= mgr->count) return false;
 
-    u32 ci = g_wp_idx;
-    u32 ni = (ci+1 < g_wp_count) ? ci+1 : g_wp_count-1;
-    u32 n2i= (ci+2 < g_wp_count) ? ci+2 : g_wp_count-1;
-    *g1 = g_waypoints[ci];
-    *g2 = g_waypoints[ni];
-    *g3 = g_waypoints[n2i];
+    u32 ci  = mgr->idx;
+    u32 ni  = (ci+1 < mgr->count) ? ci+1 : mgr->count-1;
+    u32 n2i = (ci+2 < mgr->count) ? ci+2 : mgr->count-1;
+    *g1 = mgr->wps[ci];
+    *g2 = mgr->wps[ni];
+    *g3 = mgr->wps[n2i];
     return true;
 }
 
-void waypoint_mgr_mark_reached(void) {
-    if (g_wp_idx < g_wp_count && !g_reached[g_wp_idx]) {
-        g_reached[g_wp_idx] = true;
+void waypoint_mgr_mark_reached(WaypointMgr *mgr) {
+    if (mgr->idx < mgr->count && !mgr->reached[mgr->idx]) {
+        mgr->reached[mgr->idx] = true;
     }
 }
 
-bool waypoint_mgr_check_hit(const CarState *prev, const CarState *next) {
-    if (g_wp_idx >= g_wp_count || g_reached[g_wp_idx]) return false;
-    Waypoint *t = &g_waypoints[g_wp_idx];
+bool waypoint_mgr_check_hit(WaypointMgr *mgr, const CarState *prev, const CarState *next) {
+    if (mgr->idx >= mgr->count || mgr->reached[mgr->idx]) return false;
+    Waypoint *t = &mgr->wps[mgr->idx];
     return check_hit_substep(prev->x, prev->y, next->x, next->y, t->x, t->y, TOL_XY);
 }
 
-u32 waypoint_mgr_reached_count(void) {
+u32 waypoint_mgr_reached_count(const WaypointMgr *mgr) {
     u32 n = 0;
-    for (u32 i = 0; i < g_wp_count; ++i) if (g_reached[i]) n++;
+    for (u32 i = 0; i < mgr->count; ++i) if (mgr->reached[i]) n++;
     return n;
 }
-

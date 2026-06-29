@@ -34,7 +34,8 @@ static CarState    g_vst;
 static ImuData    g_imu_data;
 static ActuatorCmd g_cmd;
 static CarState    g_vst_prev;      // 上周期虚拟车起点 (航点线段检测, 复用 CarState)
-static Encoder     g_enc_zoh;       // 编码器 ZOH (200Hz 读, 1kHz 保持)
+static Encoder     g_enc_zoh;       // 编码器 ZOH
+static WaypointMgr g_wp_mgr;        // 航点管理 (调用方持有)
 static ImuHandle   g_imu;
 static u8          g_ready;
 //===================================================文件级状态===================================================
@@ -44,7 +45,6 @@ static const Waypoint g_waypoints[] = {
     {4.0f, 0.0f}, {4.0f, 2.0f}, {0.0f, 2.0f}, {0.0f, 4.0f},
     {2.0f, 6.0f}, {5.0f, 5.0f}, {6.0f, 2.0f}, {3.0f,-1.0f},
 };
-#define WP_COUNT (sizeof(g_waypoints)/sizeof(g_waypoints[0]))
 //===================================================航点===================================================
 
 //===================================================层入口声明===================================================
@@ -102,7 +102,8 @@ void tasks_init(void) {
     g_imu = hal_imu_create(&imu_660rc_driver);
     ins_init();
 
-    waypoint_mgr_init(g_waypoints, WP_COUNT);
+    waypoint_mgr_init(&g_wp_mgr, g_waypoints,
+        sizeof(g_waypoints)/sizeof(g_waypoints[0]));
     planner_init();
     tracker_init();
 
@@ -112,7 +113,7 @@ void tasks_init(void) {
 
     {
         Waypoint g1, g2, g3;
-        if (waypoint_mgr_get_window(&g1, &g2, &g3)) {
+        if (waypoint_mgr_get_window(&g_wp_mgr, &g1, &g2, &g3)) {
             planner_forward(&g_vst, &g1, &g2, &g3);
         }
     }
@@ -148,17 +149,17 @@ void car_control_update(void) {
 //===================================================主循环任务===================================================
 
 static void task_20hz_planner(void) {
-    if (waypoint_mgr_check_hit(&g_vst_prev, &g_vst)) {
-        waypoint_mgr_mark_reached();
+    if (waypoint_mgr_check_hit(&g_wp_mgr, &g_vst_prev, &g_vst)) {
+        waypoint_mgr_mark_reached(&g_wp_mgr);
     }
     Waypoint g1, g2, g3;
-    if (!waypoint_mgr_get_window(&g1, &g2, &g3)) return;
+    if (!waypoint_mgr_get_window(&g_wp_mgr, &g1, &g2, &g3)) return;
     planner_forward(&g_vst, &g1, &g2, &g3);
     g_vst_prev = g_vst;
 }
 
 static void task_10hz_debug(void) {
-    u32 wp_done = waypoint_mgr_reached_count();
+    u32 wp_done = waypoint_mgr_reached_count(&g_wp_mgr);
     f32 ey = tracker_get_ey();
     f32 omg = tracker_get_omega_cmd();
     (void)wp_done; (void)ey; (void)omg;
