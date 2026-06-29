@@ -35,7 +35,7 @@ static ImuData     g_imu_data;
 static ActuatorCmd g_cmd;
 static CarState    g_vst_prev;      // 上周期虚拟车起点 (航点线段检测, 复用 CarState)
 static PlannerAction g_plan;         // NN 动作 ZOH (20Hz 更新)
-static Encoder     g_enc;       // 编码器 ZOH
+static Encoder     g_enc;            // 编码器读数
 static WaypointMgr g_wp_mgr;        // 航点管理 (调用方持有)
 static ImuHandle   g_imu;
 static bool        g_ready;
@@ -135,7 +135,7 @@ void car_control_update(void) {
     // ── 1kHz: IMU 采样 ──
     imu_read(&g_imu_data, g_imu);
 
-    // ── 编码器 ZOH: 200Hz 读, 其他 tick 保持 ──
+    // ── 编码器: 200Hz 读取, 其他 tick 保持 ──
     static u8 div200 = 0;
     if (++div200 >= 5) {
         div200 = 0;
