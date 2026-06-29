@@ -2,7 +2,8 @@
  * tasks.c — 四层架构胶水
  *
  * ┌─────────────────────────────────────────────────────────┐
- * │ 状态观测 (1kHz ISR) 5状态: x,y,θ(INS) v(编码器) δ=指令 │
+ * │ 状态观测 (1kHz ISR)  IMU融合 + 编码器累积 + δ=指令     │
+ * │ 里程计 (200Hz ISR)   5ms累积→速度, x,y,θ               │
  * │ 航点层 (20Hz main)  到达检测 + 3窗口获取               │
  * │ 规划层 (20Hz main)  车体变换 + NN → ZOH 动作           │
  * │ 跟踪层 (200Hz ISR)  虚拟车推进 + LQR + LADRC → 控制量  │
@@ -29,11 +30,13 @@
 #include "utils.h"
 
 //===================================================文件级状态===================================================
-static CarState    g_car;          // 真实小车状态 (传感器→估计→跟踪)
+static CarState    g_car;          // 真实小车状态
 static CarState    g_vst;          // 虚拟小车状态 (跟踪层持有, 仅同步一次)
 static SensorData  g_sens;         // 传感器采样
 static ActuatorCmd g_cmd;          // 执行器指令
 static f32         g_vst_prev[2];  // 上周期虚拟车起点 (航点层线段检测)
+static f32         g_enc_l_acc;    // 左编码器累积 [m] (5ms窗口, 200Hz清零)
+static f32         g_enc_r_acc;    // 右编码器累积 [m]
 static ImuHandle   g_imu;
 static u8          g_ready;
 //===================================================文件级状态===================================================
@@ -49,13 +52,10 @@ static const Waypoint g_waypoints[] = {
 //===================================================层入口声明===================================================
 static void sensors_read(SensorData *s, ImuHandle imu);
 static void car_state_observe(CarState *car, const SensorData *s, f32 delta_cmd);
+static void odometry_update(CarState *car, f32 enc_l, f32 enc_r);
 static void tracking_layer_step(CarState *vst, CarState *car, ActuatorCmd *cmd);
 static void actuators_apply(const ActuatorCmd *cmd);
 
-// 执行层 (200Hz)
-static void actuators_apply(const ActuatorCmd *cmd);
-
-// 主循环任务
 static void task_20hz_planner(void);
 static void task_10hz_debug(void);
 static void task_1hz_heartbeat(void);
@@ -63,7 +63,6 @@ static void task_1hz_heartbeat(void);
 
 //===================================================传感器→观测 实现===================================================
 
-// 读取全部传感器 → SensorData
 static void sensors_read(SensorData *s, ImuHandle imu) {
     Encoder enc; hal_encoder_get(&enc);
     s->enc_l = enc.left;
@@ -73,32 +72,34 @@ static void sensors_read(SensorData *s, ImuHandle imu) {
     if (s->has_quat) hal_imu_read_quat(s->quat, imu);
 }
 
-// 5 状态集中观测: 所有输入来自参数, 纯计算, 不访问硬件
+// 1kHz: IMU融合 + 编码器累积 + delta (不含速度/位置——200Hz才做)
 static void car_state_observe(CarState *car, const SensorData *s, f32 delta_cmd) {
-    f32 vl = s->enc_l * INV_ISR_DT;
-    f32 vr = s->enc_r * INV_ISR_DT;
-    ins_fuse_theta(s->gyro[2], s->quat, s->has_quat);  // 陀螺+四元数 → theta
-    ins_update_odom(car, vl, vr, ISR_DT);               // v, theta, x, y
-    car->delta = delta_cmd;                             // 舵机跟踪良好 → 真值=指令
+    g_enc_l_acc += s->enc_l;
+    g_enc_r_acc += s->enc_r;
+    ins_fuse_theta(s->gyro[2], s->quat, s->has_quat);
+    car->delta = delta_cmd;
+}
+
+// 200Hz: 5ms累积编码器→速度→里程计 (量化误差降至1/5)
+static void odometry_update(CarState *car, f32 enc_l, f32 enc_r) {
+    f32 vl = enc_l * (f32)TRACKER_FREQ;   // = enc_l / CTRL_DT (乘逆元)
+    f32 vr = enc_r * (f32)TRACKER_FREQ;
+    ins_update_odom(car, vl, vr, CTRL_DT);
 }
 
 //===================================================跟踪层 实现===================================================
 // 200Hz: 虚拟车离线推进 → LQR 横向 → LADRC 纵向 + 差速 → 控制量
 
 static void tracking_layer_step(CarState *vst, CarState *car, ActuatorCmd *cmd) {
-    // 虚拟车推进 (NN ZOH 动作)
     f32 nn_a = planner_nn_a();
     f32 nn_o = planner_nn_omega();
     mcu_kinematics_step(vst, nn_a, nn_o);
 
-    // LQR 横向跟踪: 真实 vs 虚拟
     f32 omega_cmd = tracker_step(car, vst, nn_o);
     f32 e_x       = tracker_get_ex();
 
-    // 伺服: 前轮转角积分
     cmd->servo_delta = clamp(car->delta + omega_cmd * CTRL_DT, -DELTA_MAX, DELTA_MAX);
 
-    // 纵向 LADRC + 阿克曼差速
     f32 thr_L, thr_R;
     longitudinal_step(&thr_L, &thr_R, car->v, vst->v, nn_a, e_x, car->delta);
     cmd->motor_l = thr_L;
@@ -129,13 +130,11 @@ void tasks_init(void) {
     planner_init();
     tracker_init();
 
-    // 虚拟状态从真实状态同步一次, 此后跟踪层自行推进
     memset(&g_vst, 0, sizeof(g_vst));
     g_vst = g_car;
     g_vst_prev[0] = g_car.x;
     g_vst_prev[1] = g_car.y;
 
-    // 首帧 NN 动作 (确保 ISR 启动前 ZOH 有效)
     {
         Waypoint g1, g2, g3;
         if (waypoint_mgr_get_window(&g1, &g2, &g3)) {
@@ -148,16 +147,19 @@ void tasks_init(void) {
 
 //===================================================ISR 控制===================================================
 
-// 1kHz: 传感器 + 5状态观测 (每次) + 跟踪层→执行层 (每5次, 200Hz)
+// 1kHz: 传感器 + IMU偏航 + 编码器累积 (每次)
+//       + 里程计 + 跟踪层→执行层 (每5次, 200Hz)
 void car_control_update(void) {
     if (!g_ready) return;
 
     sensors_read(&g_sens, g_imu);                                  // ── 传感器 (1kHz) ──
-    car_state_observe(&g_car, &g_sens, g_cmd.servo_delta);         // ── 5状态观测 (1kHz) ──
+    car_state_observe(&g_car, &g_sens, g_cmd.servo_delta);         // ── IMU+编码器累积 (1kHz) ──
 
     static u8 div200 = 0;                                           // 200Hz 分频
     if (++div200 >= 5) {
         div200 = 0;
+        odometry_update(&g_car, g_enc_l_acc, g_enc_r_acc);         // ── 里程计 (200Hz, 5ms累积) ──
+        g_enc_l_acc = 0.0f; g_enc_r_acc = 0.0f;                    // 清零累积
         tracking_layer_step(&g_vst, &g_car, &g_cmd);               // ── 跟踪层 (200Hz) ──
         actuators_apply(&g_cmd);                                    // ── 执行层 (200Hz) ──
     }
@@ -165,21 +167,13 @@ void car_control_update(void) {
 
 //===================================================主循环任务===================================================
 
-// 20Hz: 航点层 + 规划层
 static void task_20hz_planner(void) {
-    // ── 航点层: 到达检测 ──
     if (waypoint_mgr_check_hit(g_vst_prev, (f32[]){g_vst.x, g_vst.y})) {
         waypoint_mgr_mark_reached();
     }
-
-    // ── 航点层: 获取 3 窗口 ──
     Waypoint g1, g2, g3;
     if (!waypoint_mgr_get_window(&g1, &g2, &g3)) return;
-
-    // ── 规划层: 车体变换 + NN → ZOH ──
     planner_forward(&g_vst, &g1, &g2, &g3);
-
-    // 记本周期起点 (供下次航点层线段检测)
     g_vst_prev[0] = g_vst.x;
     g_vst_prev[1] = g_vst.y;
 }
@@ -197,7 +191,7 @@ static void task_1hz_heartbeat(void) {
 
 //===================================================任务表===================================================
 Task tasks[TASK_NUM] = {
-    {task_20hz_planner,   50,   1, 0},     // 20Hz: 航点 + 规划
-    {task_10hz_debug,    100,   1, 0},     // 10Hz: 遥测
-    {task_1hz_heartbeat, 1000,  1, 0},     // 1Hz:  心跳
+    {task_20hz_planner,   50,   1, 0},
+    {task_10hz_debug,    100,   1, 0},
+    {task_1hz_heartbeat, 1000,  1, 0},
 };
