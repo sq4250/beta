@@ -136,10 +136,8 @@ void car_control_update(void) {
         hal_encoder_get(&g_enc_zoh);
     }
 
-    // ── 1kHz: 状态估计 (IMU偏航 + 编码器里程计 ZOH) ──
-    car_estimate_update(&g_car, g_imu_data.gyro[2], g_imu_data.quat,
-                        g_imu_data.has_quat, &g_enc_zoh);
-    g_car.delta = g_cmd.servo_delta;
+    // ── 1kHz: 状态估计 (测量 + 上周期控制量 → 5状态) ──
+    car_estimate_update(&g_car, &g_imu_data, &g_enc_zoh, &g_cmd);
 
     // ── 200Hz: 跟踪层 + 执行层 ──
     if (div200 == 0) {
