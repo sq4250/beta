@@ -5,15 +5,6 @@
 #include "lqr_gains.h"
 #include "utils.h"
 
-// 车体坐标系误差投影: ref 系下的 (rs→vst) 纵/横向分量
-static void ref_frame_error(f32 *ex, f32 *ey,
-                             const CarState *rs, const CarState *vst
-    ) {
-    f32 ct = cosf(vst->theta), st = sinf(vst->theta);
-    *ex = (vst->x - rs->x) * ct + (vst->y - rs->y) * st;
-    *ey = (rs->x - vst->x) * st - (rs->y - vst->y) * ct;
-}
-
 static void lqr_lookup(f32 g[5], f32 v) {
     f32 vc = v;
     if (vc < LQR_V_MIN) vc = LQR_V_MIN;
@@ -37,17 +28,14 @@ static void lqr_lookup(f32 g[5], f32 v) {
     }
 }
 
-f32 lateral_step(const CarState *rs, const CarState *vst, f32 omega_ff, f32 gyro_z,
-                 f32 *ex, f32 *ey
+f32 lateral_step(const CarState *rs, const CarState *vst, f32 omega_ff, f32 gyro_z, f32 ey
     ) {
-    ref_frame_error(ex, ey, rs, vst);
-
     f32 eth  = wrap_pi(vst->theta - rs->theta);
     f32 ey_d = rs->v * sinf(eth);
     f32 eth_d = bicycle_curvature(vst->v, vst->delta) - gyro_z;
     f32 ed    = vst->delta - rs->delta;
 
     f32 g[5]; lqr_lookup(g, vst->v);
-    f32 omega_fb = g[0]*(*ey) + g[1]*ey_d + g[2]*eth + g[3]*eth_d + g[4]*ed;
+    f32 omega_fb = g[0]*ey + g[1]*ey_d + g[2]*eth + g[3]*eth_d + g[4]*ed;
     return omega_ff + omega_fb;
 }

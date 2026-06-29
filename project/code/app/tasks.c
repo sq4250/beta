@@ -67,17 +67,28 @@ static void imu_read(ImuData *d, const ImuHandle imu) {
     if (d->has_quat) hal_imu_read_quat(d->quat, imu);
 }
 
+//===================================================误差投影===================================================
+
+// 真实车→虚拟车误差投影到参考系 (e = r - y = vst - rs)
+static void ref_frame_error(f32 *ex, f32 *ey,
+                            const CarState *rs, const CarState *vst
+    ) {
+    f32 ct = cosf(vst->theta), st = sinf(vst->theta);
+    *ex = (vst->x - rs->x) * ct + (vst->y - rs->y) * st;
+    *ey = (rs->x - vst->x) * st - (rs->y - vst->y) * ct;
+}
+
 //===================================================跟踪层 (200Hz, 只读 car)===================================================
 
-// 更新 vst + cmd, 不写 car
 static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst,
                                 const CarState *car,
                                 const PlannerAction *plan, f32 gyro_z
     ) {
     mcu_kinematics_step(vst, plan->a, plan->omega);
 
-    f32 e_x;
-    f32 omega_cmd = lateral_step(car, vst, plan->omega, gyro_z, &e_x, NULL);
+    f32 e_x, e_y;
+    ref_frame_error(&e_x, &e_y, car, vst);
+    f32 omega_cmd = lateral_step(car, vst, plan->omega, gyro_z, e_y);
     cmd->servo_delta = clamp(car->delta + omega_cmd * CTRL_DT, -DELTA_MAX, DELTA_MAX);
     f32 thr_l, thr_r;
     longitudinal_step(&thr_l, &thr_r, car->v, vst->v, plan->a, e_x, car->delta);
