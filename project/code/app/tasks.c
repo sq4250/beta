@@ -79,10 +79,10 @@ static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst,
     f32 e_x;
     f32 omega_cmd = lateral_step(car, vst, plan->omega, gyro_z, &e_x, NULL);
     cmd->servo_delta = clamp(car->delta + omega_cmd * CTRL_DT, -DELTA_MAX, DELTA_MAX);
-    f32 thr_L, thr_R;
-    longitudinal_step(&thr_L, &thr_R, car->v, vst->v, plan->a, e_x, car->delta);
-    cmd->motor_l = thr_L;
-    cmd->motor_r = thr_R;
+    f32 thr_l, thr_r;
+    longitudinal_step(&thr_l, &thr_r, car->v, vst->v, plan->a, e_x, car->delta);
+    cmd->motor_l = thr_l;
+    cmd->motor_r = thr_r;
 }
 
 //===================================================执行层 (200Hz)===================================================

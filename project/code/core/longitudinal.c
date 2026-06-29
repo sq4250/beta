@@ -23,7 +23,7 @@ void longitudinal_init(void) {
     g_inv_b0 = 1.0f / LONG_B0;
 }
 
-void longitudinal_step(f32 *thr_L, f32 *thr_R,
+void longitudinal_step(f32 *thr_l, f32 *thr_r,
                        f32 v_meas, f32 v_ref, f32 a_ref, f32 e_x, f32 delta
     ) {
 
@@ -40,11 +40,11 @@ void longitudinal_step(f32 *thr_L, f32 *thr_R,
     // ── 阿克曼差速 ──
     f32 abs_d = delta; if (abs_d < 0.0f) abs_d = -abs_d;
     if (abs_d < 1e-4f) {
-        *thr_L = thr; *thr_R = thr;
+        *thr_l = thr; *thr_r = thr;
     } else {
         f32 inv_R = tanf(delta) * INV_WHEELBASE;
         f32 hw    = TRACK_WIDTH * 0.5f;
-        *thr_L = thr * (1.0f - hw * inv_R);
-        *thr_R = thr * (1.0f + hw * inv_R);
+        *thr_l = thr * (1.0f - hw * inv_R);
+        *thr_r = thr * (1.0f + hw * inv_R);
     }
 }
