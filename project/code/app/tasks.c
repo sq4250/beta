@@ -33,7 +33,7 @@ static CarState    g_car;
 static CarState    g_vst;
 static ImuData    g_imu_data;
 static ActuatorCmd g_cmd;
-static Waypoint    g_vst_prev;      // 上周期虚拟车起点 (航点线段检测)
+static CarState    g_vst_prev;      // 上周期虚拟车起点 (航点线段检测, 复用 CarState)
 static Encoder     g_enc_zoh;       // 编码器 ZOH (200Hz 读, 1kHz 保持)
 static ImuHandle   g_imu;
 static u8          g_ready;
@@ -108,7 +108,7 @@ void tasks_init(void) {
 
     memset(&g_vst, 0, sizeof(g_vst));
     g_vst = g_car;
-    g_vst_prev = *(Waypoint*)&g_car;
+    g_vst_prev = g_car;
 
     {
         Waypoint g1, g2, g3;
@@ -148,13 +148,13 @@ void car_control_update(void) {
 //===================================================主循环任务===================================================
 
 static void task_20hz_planner(void) {
-    if (waypoint_mgr_check_hit(&g_vst_prev, (const Waypoint *)&g_vst)) {
+    if (waypoint_mgr_check_hit((const Waypoint *)&g_vst_prev, (const Waypoint *)&g_vst)) {
         waypoint_mgr_mark_reached();
     }
     Waypoint g1, g2, g3;
     if (!waypoint_mgr_get_window(&g1, &g2, &g3)) return;
     planner_forward(&g_vst, &g1, &g2, &g3);
-    g_vst_prev = *(Waypoint*)&g_vst;
+    g_vst_prev = g_vst;
 }
 
 static void task_10hz_debug(void) {
