@@ -1,13 +1,13 @@
 /**
- * hal_motor.h — 双后轮电机驱动
+ * hal_motor.h — 双后轮电机驱动 (油门接口)
  */
 #ifndef HAL_MOTOR_H
 #define HAL_MOTOR_H
 #include "common.h"
 
-typedef struct { i32 left; i32 right; } MotorPwm;
-
 void hal_motor_init(void);
-void hal_motor_set(const MotorPwm *pwm);
+
+// 左右油门 [-1, 1], HAL 层负责归一化到 PWM
+void hal_motor_set_thr(f32 thr_l, f32 thr_r);
 
 #endif

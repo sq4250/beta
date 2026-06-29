@@ -4,7 +4,6 @@
 #include "hal_motor.h"
 #include "zf_common_headfile.h"
 
-// 硬件引脚 (根据实际接线修改)
 #define MOTOR_L_PWM_CH   TCPWM_CH06_P02_1
 #define MOTOR_R_PWM_CH   TCPWM_CH07_P02_0
 #define MOTOR_L_DIR      P02_3
@@ -13,7 +12,8 @@
 #define MOTOR_R_POLARITY 1
 #define MOTOR_PWM_FREQ   17000
 
-static void set_channel(pwm_channel_enum ch, gpio_pin_enum dir, u8 polarity, i32 pwm) {
+static void set_thr(pwm_channel_enum ch, gpio_pin_enum dir, u8 polarity, f32 thr) {
+    i32 pwm = (i32)(thr * (f32)PWM_DUTY_MAX);
     if (pwm >= 0) {
         gpio_set_level(dir, polarity);
     } else {
@@ -30,7 +30,7 @@ void hal_motor_init(void) {
     gpio_init(MOTOR_R_DIR, GPO, 0, GPO_PUSH_PULL);
 }
 
-void hal_motor_set(const MotorPwm *pwm) {
-    set_channel(MOTOR_L_PWM_CH, MOTOR_L_DIR, MOTOR_L_POLARITY, pwm->left);
-    set_channel(MOTOR_R_PWM_CH, MOTOR_R_DIR, MOTOR_R_POLARITY, pwm->right);
+void hal_motor_set_thr(f32 thr_l, f32 thr_r) {
+    set_thr(MOTOR_L_PWM_CH, MOTOR_L_DIR, MOTOR_L_POLARITY, thr_l);
+    set_thr(MOTOR_R_PWM_CH, MOTOR_R_DIR, MOTOR_R_POLARITY, thr_r);
 }

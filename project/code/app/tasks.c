@@ -86,11 +86,7 @@ static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst, const CarState 
 
 static void actuators_apply(const ActuatorCmd *cmd) {
     hal_servo_set_delta(cmd->servo_delta);
-    MotorPwm pwm = {
-        .left  = (i32)(cmd->motor_l * (f32)PWM_DUTY_MAX),
-        .right = (i32)(cmd->motor_r * (f32)PWM_DUTY_MAX),
-    };
-    hal_motor_set(&pwm);
+    hal_motor_set_thr(cmd->motor_l, cmd->motor_r);
 }
 
 //===================================================初始化===================================================
