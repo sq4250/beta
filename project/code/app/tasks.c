@@ -70,8 +70,10 @@ static void imu_read(ImuData *d, const ImuHandle imu) {
 //===================================================跟踪层 (200Hz, 只读 car)===================================================
 
 // 更新 vst + cmd, 不写 car
-static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst, const CarState *car,
-                                 const PlannerAction *plan) {
+static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst,
+                                const CarState *car,
+                                const PlannerAction *plan
+    ) {
     mcu_kinematics_step(vst, plan->a, plan->omega);
 
     f32 omega_cmd = tracker_step(car, vst, plan->omega, g_imu_data.gyro[2]);
@@ -102,7 +104,6 @@ void tasks_init(void) {
         sizeof(g_waypoints)/sizeof(g_waypoints[0]));
     tracker_init();
 
-    memset(&g_vst, 0, sizeof(g_vst));
     g_vst = g_car;
     g_vst_prev = g_car;
 
