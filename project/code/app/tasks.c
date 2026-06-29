@@ -16,7 +16,7 @@
 
 #include "hal_imu.h"
 #include "imu_660rc.h"
-#include "core/ins.h"
+#include "core/estimator.h"
 #include "hal_servo.h"
 #include "hal_motor.h"
 #include "hal_encoder.h"

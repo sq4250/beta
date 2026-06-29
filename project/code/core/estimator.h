@@ -1,8 +1,11 @@
 /**
- * ins.h — 状态估计: 测量 + 控制量 → 5状态
+ * estimator.h — 状态估计: 测量 + 控制量 → 5 状态
+ *
+ * x̂ = f(x̂, u, y)
+ *   u = ActuatorCmd, y = ImuData + Encoder
  */
-#ifndef INS_H
-#define INS_H
+#ifndef ESTIMATOR_H
+#define ESTIMATOR_H
 #include "common.h"
 #include "car_state.h"
 

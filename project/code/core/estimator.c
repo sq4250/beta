@@ -1,7 +1,7 @@
 /**
- * ins.c — 状态估计实现 (纯计算, 不访问硬件)
+ * estimator.c — 状态估计: 测量 + 控制量 → x̂ (纯计算)
  */
-#include "ins.h"
+#include "estimator.h"
 #include "config.h"
 #include <math.h>
 

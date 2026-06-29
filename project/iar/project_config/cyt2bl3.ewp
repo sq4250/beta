@@ -2204,7 +2204,7 @@
     <group>
         <name>core</name>
         <file>
-            <name>$PROJ_DIR$\..\..\code\core\ins.c</name>
+            <name>$PROJ_DIR$\..\..\code\core\estimator.c</name>
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\code\core\kinematics.c</name>
