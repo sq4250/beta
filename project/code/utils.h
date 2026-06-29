@@ -12,7 +12,7 @@
 f32 wrap_pi(f32 rad);
 f32 bicycle_curvature(f32 v, f32 delta);
 
-// 线段-圆相交检测
-bool check_hit_substep(const Waypoint *prev, const Waypoint *next, const Waypoint *target, f32 tol);
+// 线段 prev→next 是否穿过以 (tx,ty) 为圆心 tol 为半径的圆
+bool check_hit_substep(f32 px, f32 py, f32 nx, f32 ny, f32 tx, f32 ty, f32 tol);
 
 #endif
