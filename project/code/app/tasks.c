@@ -2,11 +2,10 @@
  * tasks.c — 四层架构胶水
  *
  * ┌─────────────────────────────────────────────────────────┐
- * │ 状态观测 (1kHz ISR)  IMU 偏航融合 + δ = 指令           │
- * │ 里程计 (200Hz ISR)  编码器(读+清零) → 速度 → x,y,θ     │
+ * │ 状态观测 (200Hz ISR) 编码器+IMU → v,x,y,θ,δ            │
  * │ 航点层 (20Hz main)  到达检测 + 3 窗口获取              │
  * │ 规划层 (20Hz main)  车体变换 + NN → ZOH 动作           │
- * │ 跟踪层 (200Hz ISR)  虚拟车推进 + LQR + LADRC → 控制量  │
+ * │ 跟踪层 (200Hz ISR)  只读 car, 推进 vst, 输出控制量     │
  * │ 执行层 (200Hz ISR)  舵机 PWM + 电机 PWM                │
  * └─────────────────────────────────────────────────────────┘
  */
@@ -50,7 +49,7 @@ static const Waypoint g_waypoints[] = {
 //===================================================层入口声明===================================================
 static void imu_read(ImuData *d, ImuHandle imu);
 static void imu_fuse(const ImuData *d);
-static void tracking_layer_step(CarState *vst, CarState *car, ActuatorCmd *cmd);
+static void tracking_layer_step(CarState *vst, const CarState *car, ActuatorCmd *cmd);
 static void actuators_apply(const ActuatorCmd *cmd);
 
 static void task_20hz_planner(void);
@@ -70,22 +69,14 @@ static void imu_fuse(const ImuData *d) {
     ins_fuse_theta(d->gyro[2], d->quat, d->has_quat);
 }
 
-//===================================================里程计 + 跟踪层 (200Hz)===================================================
+//===================================================跟踪层 (200Hz, 只读 car)===================================================
 
-// 200Hz: 编码器(读+清零)→5ms增量→速度→里程计→LQR→LADRC→控制量
-static void tracking_layer_step(CarState *vst, CarState *car, ActuatorCmd *cmd) {
-    // 编码器 (200Hz, 5ms 累积, 量化误差 1/5 于 1kHz)
-    Encoder enc; hal_encoder_get(&enc);
-    f32 vl = enc.left  * (f32)TRACKER_FREQ;
-    f32 vr = enc.right * (f32)TRACKER_FREQ;
-    ins_update_odom(car, vl, vr, CTRL_DT);
-
-    // 虚拟车推进
+// 更新 vst + cmd, 不写 car
+static void tracking_layer_step(CarState *vst, const CarState *car, ActuatorCmd *cmd) {
     f32 nn_a = planner_nn_a();
     f32 nn_o = planner_nn_omega();
     mcu_kinematics_step(vst, nn_a, nn_o);
 
-    // LQR 横向 + LADRC 纵向
     f32 omega_cmd = tracker_step(car, vst, nn_o);
     f32 e_x       = tracker_get_ex();
     cmd->servo_delta = clamp(car->delta + omega_cmd * CTRL_DT, -DELTA_MAX, DELTA_MAX);
@@ -139,15 +130,26 @@ void tasks_init(void) {
 void car_control_update(void) {
     if (!g_ready) return;
 
-    imu_read(&g_imu_data, g_imu);                                   // ── IMU 采样 (1kHz) ──
-    imu_fuse(&g_imu_data);                                          // ── 偏航融合 (1kHz) ──
-    g_car.delta = g_cmd.servo_delta;                                // ── δ = 上周期指令 (1kHz) ──
+    // ── 1kHz: IMU 采样 + 偏航融合 ──
+    imu_read(&g_imu_data, g_imu);
+    imu_fuse(&g_imu_data);
 
     static u8 div200 = 0;
     if (++div200 >= 5) {
         div200 = 0;
-        tracking_layer_step(&g_vst, &g_car, &g_cmd);                // ── 里程计+跟踪 (200Hz) ──
-        actuators_apply(&g_cmd);                                    // ── 执行层 (200Hz) ──
+
+        // ── 200Hz: 状态观测 (编码器→速度→里程计) ──
+        {
+            Encoder enc; hal_encoder_get(&enc);
+            f32 vl = enc.left  * (f32)TRACKER_FREQ;
+            f32 vr = enc.right * (f32)TRACKER_FREQ;
+            ins_update_odom(&g_car, vl, vr, CTRL_DT);
+        }
+        g_car.delta = g_cmd.servo_delta;                            // δ = 上周期舵机指令
+
+        // ── 200Hz: 跟踪层 (只读 car, 更新 vst + cmd) ──
+        tracking_layer_step(&g_vst, &g_car, &g_cmd);
+        actuators_apply(&g_cmd);
     }
 }
 
