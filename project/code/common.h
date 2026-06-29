@@ -44,7 +44,7 @@ typedef double              f64;
 #define DEG2RAD  0.017453292f   // = π/180
 
 //===================================================管道数据协议===================================================
-// IMU 采样数据 (imu_read → imu_fuse)
+// IMU 采样数据 (imu_read → car_estimate_update)
 typedef struct {
     f32 gyro[3];             // 陀螺三轴 [rad/s] (已去 bias)
     f32 quat[4];             // 四元数 [w,x,y,z]

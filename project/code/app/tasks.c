@@ -48,7 +48,6 @@ static const Waypoint g_waypoints[] = {
 
 //===================================================层入口声明===================================================
 static void imu_read(ImuData *d, const ImuHandle imu);
-static void imu_fuse(CarState *car, const ImuData *d);
 static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst, const CarState *car);
 static void actuators_apply(const ActuatorCmd *cmd);
 
@@ -63,10 +62,6 @@ static void imu_read(ImuData *d, const ImuHandle imu) {
     hal_imu_read_gyro(d->gyro, imu);
     d->has_quat = hal_imu_has_quat(imu);
     if (d->has_quat) hal_imu_read_quat(d->quat, imu);
-}
-
-static void imu_fuse(CarState *car, const ImuData *d) {
-    ins_fuse_theta(car, d->gyro[2], d->quat, d->has_quat);
 }
 
 //===================================================跟踪层 (200Hz, 只读 car)===================================================
@@ -130,20 +125,18 @@ void tasks_init(void) {
 void car_control_update(void) {
     if (!g_ready) return;
 
-    // ── 1kHz: IMU 采样 + 偏航融合 ──
+    // ── 1kHz: IMU 采样 ──
     imu_read(&g_imu_data, g_imu);
-    imu_fuse(&g_car, &g_imu_data);
 
     static u8 div200 = 0;
     if (++div200 >= 5) {
         div200 = 0;
 
-        // ── 200Hz: 状态观测 (编码器→速度→里程计) ──
+        // ── 200Hz: 状态估计 (IMU偏航 + 编码器里程计) ──
         {
             Encoder enc; hal_encoder_get(&enc);
-            f32 vl = enc.left  * (f32)TRACKER_FREQ;
-            f32 vr = enc.right * (f32)TRACKER_FREQ;
-            ins_update_odom(&g_car, vl, vr, CTRL_DT);
+            car_estimate_update(&g_car, g_imu_data.gyro[2], g_imu_data.quat,
+                                g_imu_data.has_quat, enc.left, enc.right);
         }
         g_car.delta = g_cmd.servo_delta;                            // δ = 上周期舵机指令
 
