@@ -10,7 +10,7 @@
 
 static u32 tick_ms = 0;                                                         // 系统 tick 计数 (ms)
 static void (*tick_handler)(void);                                              // tick 回调函数指针
-static u8 is_init = 0;                                                          // 初始化标志
+static bool is_init = false;                                                    // 初始化标志
 
 //-------------------------------------------------------------------------------------------------------------------
 // 函数简介     tick 中断回调
@@ -35,7 +35,7 @@ void hal_tick_callback(void) {
 //-------------------------------------------------------------------------------------------------------------------
 void hal_tick_init(void (*handler)(void)) {
     if (is_init) return;
-    is_init = 1;
+    is_init = true;
 
     tick_handler = handler;
     pit_ms_init(PIT_CH1, 1);                                                    // PIT_CH1 1ms 周期中断
