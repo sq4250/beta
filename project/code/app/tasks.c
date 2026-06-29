@@ -148,7 +148,7 @@ void car_control_update(void) {
 //===================================================主循环任务===================================================
 
 static void task_20hz_planner(void) {
-    if (waypoint_mgr_check_hit((const Waypoint *)&g_vst_prev, (const Waypoint *)&g_vst)) {
+    if (waypoint_mgr_check_hit(&g_vst_prev, &g_vst)) {
         waypoint_mgr_mark_reached();
     }
     Waypoint g1, g2, g3;

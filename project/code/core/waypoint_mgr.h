@@ -42,7 +42,7 @@ void waypoint_mgr_mark_reached(void);
 // 返回参数     bool        是否到达
 // 使用示例     if (waypoint_mgr_check_hit(vst_prev, vst_cur)) { waypoint_mgr_mark_reached(); }
 //-------------------------------------------------------------------------------------------------------------------
-bool waypoint_mgr_check_hit(const Waypoint *prev, const Waypoint *next);
+bool waypoint_mgr_check_hit(const CarState *prev, const CarState *next);
 
 // 到达总数
 u32 waypoint_mgr_reached_count(void);
