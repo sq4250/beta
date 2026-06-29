@@ -1,22 +1,11 @@
 /**
  * lateral.c — LQR 横向跟踪器 (200Hz)
  */
-
 #include "lateral.h"
 #include "lqr_gains.h"
 #include "utils.h"
 
-static f32 g_ey = 0.0f;
-static f32 g_ex = 0.0f;
-static f32 g_omega_cmd = 0.0f;
-
-void tracker_init(void) {
-    g_ey = 0.0f;
-    g_ex = 0.0f;
-    g_omega_cmd = 0.0f;
-}
-
-void tracker_lqr_gains(f32 g[5], f32 v) {
+static void lqr_gains(f32 g[5], f32 v) {
     f32 vc = v;
     if (vc < LQR_V_MIN) vc = LQR_V_MIN;
     if (vc > 3.0f) vc = 3.0f;
@@ -39,27 +28,19 @@ void tracker_lqr_gains(f32 g[5], f32 v) {
     }
 }
 
-f32 tracker_step(const CarState *rs, const CarState *vst, f32 omega_ff, f32 gyro_z) {
+f32 lateral_step(const CarState *rs, const CarState *vst, f32 omega_ff, f32 gyro_z,
+                 f32 *ex, f32 *ey
+    ) {
     f32 ct = cosf(vst->theta), st = sinf(vst->theta);
-    g_ex = (vst->x - rs->x) * ct + (vst->y - rs->y) * st;
-    f32 e_y = (rs->x - vst->x) * st - (rs->y - vst->y) * ct;
+    *ex = (vst->x - rs->x) * ct + (vst->y - rs->y) * st;
+    *ey = (rs->x - vst->x) * st - (rs->y - vst->y) * ct;
 
-    // e = r - y = vst - rs (五误差统一, 与 sim_tracker.py 数学等价)
     f32 eth  = wrap_pi(vst->theta - rs->theta);
     f32 ey_d = rs->v * sinf(eth);
-    f32 eth_d = bicycle_curvature(vst->v, vst->delta)  // 参考角速度 (模型)
-              - gyro_z;                                 // 真实角速度 (IMU)
+    f32 eth_d = bicycle_curvature(vst->v, vst->delta) - gyro_z;
     f32 ed    = vst->delta - rs->delta;
 
-    f32 g[5]; tracker_lqr_gains(g, vst->v);
-    f32 omega_fb = g[0]*e_y + g[1]*ey_d + g[2]*eth + g[3]*eth_d + g[4]*ed;
-    f32 omega_cmd = omega_ff + omega_fb;  // 前馈规划 + 反馈纠偏, 叠加
-
-    g_ey = e_y;
-    g_omega_cmd = omega_cmd;
-    return omega_cmd;
+    f32 g[5]; lqr_gains(g, vst->v);
+    f32 omega_fb = g[0]*(*ey) + g[1]*ey_d + g[2]*eth + g[3]*eth_d + g[4]*ed;
+    return omega_ff + omega_fb;
 }
-
-f32 tracker_get_ey(void)     { return g_ey; }
-f32 tracker_get_ex(void)     { return g_ex; }
-f32 tracker_get_omega_cmd(void) { return g_omega_cmd; }
