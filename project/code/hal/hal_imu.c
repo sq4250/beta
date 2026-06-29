@@ -45,18 +45,18 @@ ImuHandle hal_imu_create(const ImuDriver *drv) {
 
 void hal_imu_destroy(ImuHandle h) { free(h); }
 
-void hal_imu_read_gyro(f32 g[3], ImuHandle h) {
+void hal_imu_read_gyro(f32 g[3], const ImuHandle h) {
     i16 raw[3], a[3]; h->drv->read_raw(raw, a);
     g[0] = (f32)raw[0] * h->gyro_factor * DEG2RAD;
     g[1] = (f32)raw[1] * h->gyro_factor * DEG2RAD;
     g[2] = ((f32)raw[2] * h->gyro_factor - h->bias_gz) * DEG2RAD;
 }
-void hal_imu_read_accel(f32 a[3], ImuHandle h) {
+void hal_imu_read_accel(f32 a[3], const ImuHandle h) {
     i16 g[3], raw[3]; h->drv->read_raw(g, raw);
     a[0] = (f32)raw[0] * h->acc_factor;
     a[1] = (f32)raw[1] * h->acc_factor;
     a[2] = (f32)raw[2] * h->acc_factor;
 }
-bool hal_imu_has_quat(ImuHandle h)       { return h->drv->has_quat(); }
-void hal_imu_read_quat(f32 q[4], ImuHandle h) { h->drv->read_quat(q); }
-f32  hal_imu_gyro_bias_z(ImuHandle h)    { return h->bias_gz; }
+bool hal_imu_has_quat(const ImuHandle h)         { return h->drv->has_quat(); }
+void hal_imu_read_quat(f32 q[4], const ImuHandle h) { h->drv->read_quat(q); }
+f32  hal_imu_gyro_bias_z(const ImuHandle h)         { return h->bias_gz; }

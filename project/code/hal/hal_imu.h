@@ -19,11 +19,10 @@ typedef struct ImuHandle_ *ImuHandle;
 
 ImuHandle hal_imu_create(const ImuDriver *drv);
 void      hal_imu_destroy(ImuHandle h);
-void      hal_imu_read_gyro(f32 g[3], ImuHandle h);    // 已去bias, rad/s
-void      hal_imu_read_accel(f32 a[3], ImuHandle h);   // m/s²
-bool      hal_imu_has_quat(ImuHandle h);
-void      hal_imu_read_quat(f32 q[4], ImuHandle h);
-
-f32       hal_imu_gyro_bias_z(ImuHandle h);            // 标定值
+void      hal_imu_read_gyro(f32 g[3], const ImuHandle h);
+void      hal_imu_read_accel(f32 a[3], const ImuHandle h);
+bool      hal_imu_has_quat(const ImuHandle h);
+void      hal_imu_read_quat(f32 q[4], const ImuHandle h);
+f32       hal_imu_gyro_bias_z(const ImuHandle h);
 
 #endif
