@@ -2,7 +2,7 @@
  * tasks.c — 四层架构胶水
  *
  * ┌─────────────────────────────────────────────────────────┐
- * │ 状态观测 (200Hz ISR) 编码器+IMU → v,x,y,θ,δ            │
+ * │ 状态观测 (1kHz ISR)  IMU偏航 + 编码器ZOH → v,x,y,θ,δ   │
  * │ 航点层 (20Hz main)  到达检测 + 3 窗口获取              │
  * │ 规划层 (20Hz main)  车体变换 + NN → ZOH 动作           │
  * │ 跟踪层 (200Hz ISR)  只读 car, 推进 vst, 输出控制量     │
@@ -34,6 +34,7 @@ static CarState    g_vst;
 static ImuData    g_imu_data;
 static ActuatorCmd g_cmd;
 static f32         g_vst_prev[2];
+static f32         g_enc_l, g_enc_r;  // 编码器 ZOH (200Hz 读, 1kHz 保持)
 static ImuHandle   g_imu;
 static u8          g_ready;
 //===================================================文件级状态===================================================
@@ -128,19 +129,21 @@ void car_control_update(void) {
     // ── 1kHz: IMU 采样 ──
     imu_read(&g_imu_data, g_imu);
 
+    // ── 编码器 ZOH: 200Hz 读, 其他 tick 保持 ──
     static u8 div200 = 0;
     if (++div200 >= 5) {
         div200 = 0;
+        Encoder enc; hal_encoder_get(&enc);
+        g_enc_l = enc.left; g_enc_r = enc.right;
+    }
 
-        // ── 200Hz: 状态估计 (IMU偏航 + 编码器里程计) ──
-        {
-            Encoder enc; hal_encoder_get(&enc);
-            car_estimate_update(&g_car, g_imu_data.gyro[2], g_imu_data.quat,
-                                g_imu_data.has_quat, enc.left, enc.right);
-        }
-        g_car.delta = g_cmd.servo_delta;                            // δ = 上周期舵机指令
+    // ── 1kHz: 状态估计 (IMU偏航 + 编码器里程计 ZOH) ──
+    car_estimate_update(&g_car, g_imu_data.gyro[2], g_imu_data.quat,
+                        g_imu_data.has_quat, g_enc_l, g_enc_r);
+    g_car.delta = g_cmd.servo_delta;
 
-        // ── 200Hz: 跟踪层 (只读 car, 更新 vst + cmd) ──
+    // ── 200Hz: 跟踪层 + 执行层 ──
+    if (div200 == 0) {
         tracking_layer_step(&g_cmd, &g_vst, &g_car);
         actuators_apply(&g_cmd);
     }
