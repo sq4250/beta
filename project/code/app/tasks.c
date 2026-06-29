@@ -34,7 +34,7 @@ static CarState    g_vst;
 static ImuData    g_imu_data;
 static ActuatorCmd g_cmd;
 static f32         g_vst_prev[2];
-static f32         g_enc_l, g_enc_r;  // 编码器 ZOH (200Hz 读, 1kHz 保持)
+static Encoder     g_enc_zoh;       // 编码器 ZOH (200Hz 读, 1kHz 保持)
 static ImuHandle   g_imu;
 static u8          g_ready;
 //===================================================文件级状态===================================================
@@ -133,13 +133,12 @@ void car_control_update(void) {
     static u8 div200 = 0;
     if (++div200 >= 5) {
         div200 = 0;
-        Encoder enc; hal_encoder_get(&enc);
-        g_enc_l = enc.left; g_enc_r = enc.right;
+        hal_encoder_get(&g_enc_zoh);
     }
 
     // ── 1kHz: 状态估计 (IMU偏航 + 编码器里程计 ZOH) ──
     car_estimate_update(&g_car, g_imu_data.gyro[2], g_imu_data.quat,
-                        g_imu_data.has_quat, g_enc_l, g_enc_r);
+                        g_imu_data.has_quat, &g_enc_zoh);
     g_car.delta = g_cmd.servo_delta;
 
     // ── 200Hz: 跟踪层 + 执行层 ──

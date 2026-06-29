@@ -44,14 +44,14 @@ typedef double              f64;
 #define DEG2RAD  0.017453292f   // = π/180
 
 //===================================================管道数据协议===================================================
-// IMU 采样数据 (imu_read → car_estimate_update)
+typedef struct { f32 left; f32 right; } Encoder;
+
 typedef struct {
     f32 gyro[3];             // 陀螺三轴 [rad/s] (已去 bias)
     f32 quat[4];             // 四元数 [w,x,y,z]
     bool has_quat;           // 四元数是否有效
 } ImuData;
 
-// 执行器指令 (跟踪层 → 执行层)
 typedef struct {
     f32 servo_delta;         // 舵机前轮转角 [rad]
     f32 motor_l;             // 左电机油门 [-1, 1]
