@@ -48,7 +48,7 @@ static const Waypoint g_waypoints[] = {
 
 //===================================================层入口声明===================================================
 static void imu_read(ImuData *d, ImuHandle imu);
-static void imu_fuse(const ImuData *d);
+static void imu_fuse(CarState *car, const ImuData *d);
 static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst, const CarState *car);
 static void actuators_apply(const ActuatorCmd *cmd);
 
@@ -65,8 +65,8 @@ static void imu_read(ImuData *d, ImuHandle imu) {
     if (d->has_quat) hal_imu_read_quat(d->quat, imu);
 }
 
-static void imu_fuse(const ImuData *d) {
-    ins_fuse_theta(d->gyro[2], d->quat, d->has_quat);
+static void imu_fuse(CarState *car, const ImuData *d) {
+    ins_fuse_theta(car, d->gyro[2], d->quat, d->has_quat);
 }
 
 //===================================================跟踪层 (200Hz, 只读 car)===================================================
@@ -132,7 +132,7 @@ void car_control_update(void) {
 
     // ── 1kHz: IMU 采样 + 偏航融合 ──
     imu_read(&g_imu_data, g_imu);
-    imu_fuse(&g_imu_data);
+    imu_fuse(&g_car, &g_imu_data);
 
     static u8 div200 = 0;
     if (++div200 >= 5) {
