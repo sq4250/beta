@@ -24,7 +24,8 @@ void longitudinal_init(void) {
 }
 
 void longitudinal_step(f32 *thr_L, f32 *thr_R,
-                       f32 v_meas, f32 v_ref, f32 a_ref, f32 e_x, f32 delta) {
+                       f32 v_meas, f32 v_ref, f32 a_ref, f32 e_x, f32 delta
+    ) {
 
     // ── 降阶 LESO: 仅观测扰动 f̂ ──
     f32 z_dot = -LONG_WO * (g_z + (LONG_WO - LONG_ALPHA) * v_meas + LONG_B0 * g_u_prev);

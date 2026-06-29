@@ -8,7 +8,8 @@
 static f32 g_v_filt = 0.0f;  // EMA 滤波速度
 
 void car_estimate_update(CarState *car, const ImuData *imu,
-                         const Encoder *enc, const ActuatorCmd *cmd) {
+                         const Encoder *enc, const ActuatorCmd *cmd
+    ) {
     // ── 偏航融合 ──
     if (imu->has_quat) {
         f32 yq = atan2f(2.0f*(imu->quat[0]*imu->quat[3]+imu->quat[1]*imu->quat[2]),

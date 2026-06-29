@@ -15,6 +15,7 @@
 void longitudinal_init(void);
 
 void longitudinal_step(f32 *thr_L, f32 *thr_R,
-                       f32 v_meas, f32 v_ref, f32 a_ref, f32 e_x, f32 delta);
+                       f32 v_meas, f32 v_ref, f32 a_ref, f32 e_x, f32 delta
+    );
 
 #endif
