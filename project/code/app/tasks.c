@@ -22,7 +22,7 @@
 #include "hal_encoder.h"
 
 #include "core/planner.h"
-#include "core/tracker.h"
+#include "core/lateral.h"
 #include "core/longitudinal.h"
 #include "core/waypoint_mgr.h"
 #include "core/kinematics.h"

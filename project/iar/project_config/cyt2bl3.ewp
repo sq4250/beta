@@ -2219,7 +2219,7 @@
             <name>$PROJ_DIR$\..\..\code\core\planner.c</name>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\..\code\core\tracker.c</name>
+            <name>$PROJ_DIR$\..\..\code\core\lateral.c</name>
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\code\utils.c</name>

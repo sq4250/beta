@@ -1,12 +1,9 @@
 /**
- * tracker.h — LQR 横向跟踪器 (200Hz)
- *
- * 控制律: omega_cmd = omega_ff - (g1*ey + g2*ey_dot + g3*eth + g4*eth_dot + g5*ed)
- * 纵向:   LADRC 位置闭环 (与 tracking_layer_step 配合)
+ * lateral.h — LQR 横向跟踪器 (200Hz)
  */
 
-#ifndef TRACKER_H
-#define TRACKER_H
+#ifndef LATERAL_H
+#define LATERAL_H
 
 #include "car_state.h"
 #include "config.h"

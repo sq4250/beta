@@ -1,8 +1,8 @@
 /**
- * tracker.c — LQR 横向跟踪器 (200Hz)
+ * lateral.c — LQR 横向跟踪器 (200Hz)
  */
 
-#include "tracker.h"
+#include "lateral.h"
 #include "lqr_gains.h"
 #include "utils.h"
 
