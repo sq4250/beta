@@ -62,7 +62,7 @@ static void task_1hz_heartbeat(void);
 //===================================================IMU 观测 (1kHz)===================================================
 
 static void imu_read(ImuData *d, const ImuHandle imu) {
-    hal_imu_read_gyro(d->gyro, imu);
+    hal_imu_read_all(d->gyro, d->accel, imu);
     d->has_quat = hal_imu_has_quat(imu);
     if (d->has_quat) hal_imu_read_quat(d->quat, imu);
 }
@@ -109,6 +109,7 @@ void tasks_init(void) {
     hal_servo_init();
     hal_motor_init();
     hal_encoder_init();
+    longitudinal_init();
     g_imu = hal_imu_create(&imu_660rc_driver);
 
     waypoint_mgr_init(&g_wp_mgr, g_waypoints,

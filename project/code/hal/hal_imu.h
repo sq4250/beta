@@ -11,14 +11,14 @@
 typedef struct {
     bool (*init)(f32 *acc_scale, f32 *gyro_scale);
     void (*read_raw)(i16 g[3], i16 a[3]);
-    bool (*has_quat)(void);
-    void (*read_quat)(f32 q[4]);
+    void (*read_quat)(f32 q[4]);  // NULL → 不支持四元数
 } ImuDriver;
 
 typedef struct ImuHandle_ *ImuHandle;
 
 ImuHandle hal_imu_create(const ImuDriver *drv);
 void      hal_imu_destroy(ImuHandle h);
+void      hal_imu_read_all(f32 g[3], f32 a[3], const ImuHandle h);
 void      hal_imu_read_gyro(f32 g[3], const ImuHandle h);
 void      hal_imu_read_accel(f32 a[3], const ImuHandle h);
 bool      hal_imu_has_quat(const ImuHandle h);

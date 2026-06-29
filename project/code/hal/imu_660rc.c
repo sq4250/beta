@@ -16,11 +16,10 @@ static void read_raw(i16 g[3], i16 a[3]) {
     g[0]=imu660rc_gyro_x; g[1]=imu660rc_gyro_y; g[2]=imu660rc_gyro_z;
     a[0]=imu660rc_acc_x;  a[1]=imu660rc_acc_y;  a[2]=imu660rc_acc_z;
 }
-static bool has_quat(void) { return true; }
 static void read_quat(f32 q[4]) {
     imu660rc_get_quarternion();
     q[0]=imu660rc_quarternion[0]; q[1]=imu660rc_quarternion[1];
     q[2]=imu660rc_quarternion[2]; q[3]=imu660rc_quarternion[3];
 }
 
-const ImuDriver imu_660rc_driver = { init, read_raw, has_quat, read_quat };
+const ImuDriver imu_660rc_driver = { init, read_raw, read_quat };
