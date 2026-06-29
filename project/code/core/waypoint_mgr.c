@@ -37,10 +37,9 @@ void waypoint_mgr_mark_reached(void) {
     }
 }
 
-bool waypoint_mgr_check_hit(const f32 prev[2], const f32 next[2]) {
+bool waypoint_mgr_check_hit(const Waypoint *prev, const Waypoint *next) {
     if (g_wp_idx >= g_wp_count || g_reached[g_wp_idx]) return false;
-    return check_hit_substep(prev, next,
-        (f32[]){g_waypoints[g_wp_idx].x, g_waypoints[g_wp_idx].y}, TOL_XY);
+    return check_hit_substep(prev, next, &g_waypoints[g_wp_idx], TOL_XY);
 }
 
 u32 waypoint_mgr_reached_count(void) {
