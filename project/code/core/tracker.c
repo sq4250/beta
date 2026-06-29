@@ -4,7 +4,6 @@
 
 #include "tracker.h"
 #include "lqr_gains.h"
-#include "ins.h"
 #include "utils.h"
 
 static f32 g_ey = 0.0f;
@@ -40,7 +39,7 @@ void tracker_lqr_gains(f32 g[5], f32 v) {
     }
 }
 
-f32 tracker_step(const CarState *rs, const CarState *vst, f32 omega_ff) {
+f32 tracker_step(const CarState *rs, const CarState *vst, f32 omega_ff, f32 gyro_z) {
     f32 ct = cosf(vst->theta), st = sinf(vst->theta);
     g_ex = (vst->x - rs->x) * ct + (vst->y - rs->y) * st;
     f32 e_y = (rs->x - vst->x) * st - (rs->y - vst->y) * ct;
@@ -49,7 +48,7 @@ f32 tracker_step(const CarState *rs, const CarState *vst, f32 omega_ff) {
     f32 eth  = wrap_pi(vst->theta - rs->theta);
     f32 ey_d = rs->v * sinf(eth);
     f32 eth_d = bicycle_curvature(vst->v, vst->delta)  // 参考角速度 (模型)
-              - ins_theta_rate();                      // 真实角速度 (IMU)
+              - gyro_z;                                 // 真实角速度 (IMU)
     f32 ed    = vst->delta - rs->delta;
 
     f32 g[5]; tracker_lqr_gains(g, vst->v);

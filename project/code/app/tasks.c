@@ -31,7 +31,7 @@
 //===================================================文件级状态===================================================
 static CarState    g_car;
 static CarState    g_vst;
-static ImuData    g_imu_data;
+static ImuData     g_imu_data;
 static ActuatorCmd g_cmd;
 static CarState    g_vst_prev;      // 上周期虚拟车起点 (航点线段检测, 复用 CarState)
 static Encoder     g_enc_zoh;       // 编码器 ZOH
@@ -73,7 +73,7 @@ static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst, const CarState 
     f32 nn_o = planner_nn_omega();
     mcu_kinematics_step(vst, nn_a, nn_o);
 
-    f32 omega_cmd = tracker_step(car, vst, nn_o);
+    f32 omega_cmd = tracker_step(car, vst, nn_o, g_imu_data.gyro[2]);
     f32 e_x       = tracker_get_ex();
     cmd->servo_delta = clamp(car->delta + omega_cmd * CTRL_DT, -DELTA_MAX, DELTA_MAX);
     f32 thr_L, thr_R;
@@ -100,7 +100,6 @@ void tasks_init(void) {
     hal_motor_init();
     hal_encoder_init();
     g_imu = hal_imu_create(&imu_660rc_driver);
-    ins_init();
 
     waypoint_mgr_init(&g_wp_mgr, g_waypoints,
         sizeof(g_waypoints)/sizeof(g_waypoints[0]));

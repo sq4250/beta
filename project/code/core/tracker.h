@@ -36,7 +36,7 @@ void tracker_lqr_gains(f32 g[5], f32 v);
 // 使用示例     f32 omg = tracker_step(&real, &virt, nn_omega);
 // 备注信息     计算5项误差, LQR反馈, 切线投影消e_x
 //-------------------------------------------------------------------------------------------------------------------
-f32 tracker_step(const CarState *rs, const CarState *vst, f32 omega_ff);
+f32 tracker_step(const CarState *rs, const CarState *vst, f32 omega_ff, f32 gyro_z);
 
 //-------------------------------------------------------------------------------------------------------------------
 // 函数简介     获取当前横向/纵向误差 (用于遥测+纵向控制)
