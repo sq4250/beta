@@ -16,14 +16,13 @@ typedef struct {
 } ImuDriver;
 
 typedef struct ImuHandle_ *ImuHandle;
-typedef const struct ImuHandle_ *ConstImuHandle;
 
 ImuHandle hal_imu_create(const ImuDriver *drv);
 void      hal_imu_destroy(ImuHandle h);
-void      hal_imu_read_gyro(f32 g[3], ConstImuHandle h);
-void      hal_imu_read_accel(f32 a[3], ConstImuHandle h);
-bool      hal_imu_has_quat(ConstImuHandle h);
-void      hal_imu_read_quat(f32 q[4], ConstImuHandle h);
-f32       hal_imu_gyro_bias_z(ConstImuHandle h);
+void      hal_imu_read_gyro(f32 g[3], const ImuHandle h);
+void      hal_imu_read_accel(f32 a[3], const ImuHandle h);
+bool      hal_imu_has_quat(const ImuHandle h);
+void      hal_imu_read_quat(f32 q[4], const ImuHandle h);
+f32       hal_imu_gyro_bias_z(const ImuHandle h);
 
 #endif

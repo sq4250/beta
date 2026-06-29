@@ -49,7 +49,7 @@ static const Waypoint g_waypoints[] = {
 //===================================================航点===================================================
 
 //===================================================层入口声明===================================================
-static void imu_read(ImuData *d, ConstImuHandle imu);
+static void imu_read(ImuData *d, const ImuHandle imu);
 static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst, const CarState *car,
                                  const PlannerAction *plan, f32 gyro_z);
 static void actuators_apply(const ActuatorCmd *cmd);
@@ -61,7 +61,7 @@ static void task_1hz_heartbeat(void);
 
 //===================================================IMU 观测 (1kHz)===================================================
 
-static void imu_read(ImuData *d, ConstImuHandle imu) {
+static void imu_read(ImuData *d, const ImuHandle imu) {
     hal_imu_read_gyro(d->gyro, imu);
     d->has_quat = hal_imu_has_quat(imu);
     if (d->has_quat) hal_imu_read_quat(d->quat, imu);
