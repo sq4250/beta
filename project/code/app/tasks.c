@@ -109,7 +109,7 @@ void tasks_init(void) {
     {
         Waypoint g1, g2, g3;
         if (waypoint_mgr_get_window(&g_wp_mgr, &g1, &g2, &g3)) {
-            planner_forward(&g_vst, &g1, &g2, &g3, &g_plan);
+            planner_forward(&g_plan, &g_vst, &g1, &g2, &g3);
         }
     }
 
@@ -149,7 +149,7 @@ static void task_20hz_planner(void) {
     }
     Waypoint g1, g2, g3;
     if (!waypoint_mgr_get_window(&g_wp_mgr, &g1, &g2, &g3)) return;
-    planner_forward(&g_vst, &g1, &g2, &g3, &g_plan);
+    planner_forward(&g_plan, &g_vst, &g1, &g2, &g3);
     g_vst_prev = g_vst;
 }
 

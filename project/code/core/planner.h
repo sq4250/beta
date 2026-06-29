@@ -7,8 +7,8 @@
 #include "config.h"
 
 // NN 前向: vst + 3航点 → PlannerAction ZOH
-void planner_forward(const CarState *vst,
-                     const Waypoint *g1, const Waypoint *g2, const Waypoint *g3,
-                     PlannerAction *act);
+void planner_forward(PlannerAction *act,
+                     const CarState *vst,
+                     const Waypoint *g1, const Waypoint *g2, const Waypoint *g3);
 
 #endif
