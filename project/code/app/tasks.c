@@ -51,8 +51,7 @@ static const Waypoint g_waypoints[] = {
 //===================================================层入口声明===================================================
 static void imu_read(ImuData *d, const ImuHandle imu);
 static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst, const CarState *car,
-                                 const PlannerAction *plan, f32 gyro_z,
-                                 f32 *omega_cmd, f32 *ey);
+                                 const PlannerAction *plan, f32 gyro_z);
 static void actuators_apply(const ActuatorCmd *cmd);
 
 static void task_20hz_planner(void);
@@ -73,14 +72,13 @@ static void imu_read(ImuData *d, const ImuHandle imu) {
 // 更新 vst + cmd, 不写 car
 static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst,
                                 const CarState *car,
-                                const PlannerAction *plan, f32 gyro_z,
-                                f32 *omega_cmd, f32 *ey
+                                const PlannerAction *plan, f32 gyro_z
     ) {
     mcu_kinematics_step(vst, plan->a, plan->omega);
 
     f32 e_x;
-    *omega_cmd = lateral_step(car, vst, plan->omega, gyro_z, &e_x, ey);
-    cmd->servo_delta = clamp(car->delta + *omega_cmd * CTRL_DT, -DELTA_MAX, DELTA_MAX);
+    f32 omega_cmd = lateral_step(car, vst, plan->omega, gyro_z, &e_x, NULL);
+    cmd->servo_delta = clamp(car->delta + omega_cmd * CTRL_DT, -DELTA_MAX, DELTA_MAX);
     f32 thr_L, thr_R;
     longitudinal_step(&thr_L, &thr_R, car->v, vst->v, plan->a, e_x, car->delta);
     cmd->motor_l = thr_L;
@@ -139,7 +137,7 @@ void car_control_update(void) {
     // ── 200Hz: 跟踪层 + 执行层 ──
     if (div200 == 0) {
         tracking_layer_step(&g_cmd, &g_vst, &g_car, &g_plan,
-                            g_imu_data.gyro[2], NULL, NULL);
+                            g_imu_data.gyro[2]);
         actuators_apply(&g_cmd);
     }
 }
