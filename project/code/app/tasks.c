@@ -15,7 +15,7 @@
 #include "hal_tick.h"
 
 #include "hal_imu.h"
-#include "imu_660rc.h"
+#include "imu_660ra.h"
 #include "core/estimator.h"
 #include "hal_servo.h"
 #include "hal_motor.h"
@@ -110,7 +110,8 @@ void tasks_init(void) {
     hal_motor_init();
     hal_encoder_init();
     longitudinal_init();
-    g_imu = hal_imu_create(&imu_660rc_driver);
+    g_imu = hal_imu_create(&imu_660ra_driver);
+    if (!g_imu) { while(1); }  // IMU 初始化失败 → 终止, 避免盲开
 
     waypoint_mgr_init(&g_wp_mgr, g_waypoints,
         sizeof(g_waypoints)/sizeof(g_waypoints[0]));
@@ -125,6 +126,7 @@ void tasks_init(void) {
         }
     }
 
+    hal_encoder_get(&g_enc);  // 清零标定期间累积, 确保消费者从首次 ISR 拿到的窗口 ≤1ms
     g_ready = true;
 }
 

@@ -4,10 +4,10 @@
 #include "hal_motor.h"
 #include "zf_common_headfile.h"
 
-#define MOTOR_L_PWM_CH   TCPWM_CH06_P02_1
-#define MOTOR_R_PWM_CH   TCPWM_CH07_P02_0
-#define MOTOR_L_DIR      P02_3
-#define MOTOR_R_DIR      P02_4
+#define MOTOR_L_PWM_CH   TCPWM_CH01_P06_3
+#define MOTOR_R_PWM_CH   TCPWM_CH02_P06_5
+#define MOTOR_L_DIR      P06_4
+#define MOTOR_R_DIR      P06_6
 #define MOTOR_L_POLARITY 1
 #define MOTOR_R_POLARITY 1
 #define MOTOR_PWM_FREQ   17000

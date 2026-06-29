@@ -6,7 +6,7 @@
 #include <math.h>
 
 static bool init(f32 *acc_scale, f32 *gyro_scale) {
-    imu660ra_init();
+    if (imu660ra_init()) return false;
     *acc_scale  = 1.0f;   // 因子由 hal_imu 管理, 这里返回1
     *gyro_scale = 1.0f;
     return true;

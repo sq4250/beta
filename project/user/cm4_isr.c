@@ -402,8 +402,9 @@ void gpio_17_exti_isr()                  // 外部 GPIO_17 中断服务函数
 
 void gpio_18_exti_isr()                  // 外部 GPIO_18 中断服务函数
 {
-
-
+    if (exti_flag_get(IMU660RC_INT2_PIN)) {
+        imu660rc_callback();  // IMU660RC 四元数就绪 → 读取传感器
+    }
 }
 
 void gpio_19_exti_isr()                  // 外部 GPIO_19 中断服务函数

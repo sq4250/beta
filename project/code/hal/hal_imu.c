@@ -6,7 +6,6 @@
  */
 #include "hal_imu.h"
 #include <math.h>
-#include <stdlib.h>
 #include "system_cyt2bl.h"
 #include "config.h"
 
@@ -16,12 +15,14 @@ struct ImuHandle_ {
     f32 bias_gz;
 };
 
+static struct ImuHandle_ g_imu_inst;
+
 ImuHandle hal_imu_create(const ImuDriver *drv) {
-    ImuHandle h = malloc(sizeof(*h));
+    struct ImuHandle_ *h = &g_imu_inst;
     h->drv = drv;
 
     f32 acc_scale, gyro_scale;
-    if (!drv->init(&acc_scale, &gyro_scale)) { free(h); return NULL; }
+    if (!drv->init(&acc_scale, &gyro_scale)) return NULL;
     h->acc_factor  = 1.0f / acc_scale;
     h->gyro_factor = 1.0f / gyro_scale;
 
@@ -43,7 +44,7 @@ ImuHandle hal_imu_create(const ImuDriver *drv) {
     return h;
 }
 
-void hal_imu_destroy(ImuHandle h) { free(h); }
+void hal_imu_destroy(ImuHandle h) { (void)h; }
 
 void hal_imu_read_all(f32 g[3], f32 a[3], const ImuHandle h) {
     i16 raw_g[3], raw_a[3]; h->drv->read_raw(raw_g, raw_a);
