@@ -7,11 +7,11 @@
 
 void planner_forward(const CarState *vst,
                      const Waypoint *g1, const Waypoint *g2, const Waypoint *g3,
-                     f32 *nn_a, f32 *nn_o) {
+                     PlannerAction *act) {
     f32 inp[8];
     world_to_body_8d(inp, vst, g1, g2, g3);
-    f32 act[2];
-    nn_forward(act, inp);
-    *nn_a = act[0];
-    *nn_o = act[1];
+    f32 raw[2];
+    nn_forward(raw, inp);
+    act->a     = raw[0];
+    act->omega = raw[1];
 }

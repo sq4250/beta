@@ -53,6 +53,11 @@ typedef struct {
 } ImuData;
 
 typedef struct {
+    f32 a;                    // 纵向加速度 [m/s²]
+    f32 omega;                // 转向角速度 [rad/s]
+} PlannerAction;
+
+typedef struct {
     f32 servo_delta;         // 舵机前轮转角 [rad]
     f32 motor_l;             // 左电机油门 [-1, 1]
     f32 motor_r;             // 右电机油门 [-1, 1]

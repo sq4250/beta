@@ -6,9 +6,9 @@
 #include "car_state.h"
 #include "config.h"
 
-// NN 前向: vst + 3航点 → (a_long, omega) ZOH
+// NN 前向: vst + 3航点 → PlannerAction ZOH
 void planner_forward(const CarState *vst,
                      const Waypoint *g1, const Waypoint *g2, const Waypoint *g3,
-                     f32 *nn_a, f32 *nn_o);
+                     PlannerAction *act);
 
 #endif

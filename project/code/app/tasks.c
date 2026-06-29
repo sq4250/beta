@@ -34,7 +34,7 @@ static CarState    g_vst;
 static ImuData     g_imu_data;
 static ActuatorCmd g_cmd;
 static CarState    g_vst_prev;      // 上周期虚拟车起点 (航点线段检测, 复用 CarState)
-static f32         g_nn_a, g_nn_o;  // NN 动作 ZOH (20Hz 更新)
+static PlannerAction g_plan;         // NN 动作 ZOH (20Hz 更新)
 static Encoder     g_enc_zoh;       // 编码器 ZOH
 static WaypointMgr g_wp_mgr;        // 航点管理 (调用方持有)
 static ImuHandle   g_imu;
@@ -51,7 +51,7 @@ static const Waypoint g_waypoints[] = {
 //===================================================层入口声明===================================================
 static void imu_read(ImuData *d, const ImuHandle imu);
 static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst, const CarState *car,
-                                 f32 nn_a, f32 nn_o);
+                                 const PlannerAction *plan);
 static void actuators_apply(const ActuatorCmd *cmd);
 
 static void task_20hz_planner(void);
@@ -71,14 +71,14 @@ static void imu_read(ImuData *d, const ImuHandle imu) {
 
 // 更新 vst + cmd, 不写 car
 static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst, const CarState *car,
-                                 f32 nn_a, f32 nn_o) {
-    mcu_kinematics_step(vst, nn_a, nn_o);
+                                 const PlannerAction *plan) {
+    mcu_kinematics_step(vst, plan->a, plan->omega);
 
-    f32 omega_cmd = tracker_step(car, vst, nn_o, g_imu_data.gyro[2]);
+    f32 omega_cmd = tracker_step(car, vst, plan->omega, g_imu_data.gyro[2]);
     f32 e_x       = tracker_get_ex();
     cmd->servo_delta = clamp(car->delta + omega_cmd * CTRL_DT, -DELTA_MAX, DELTA_MAX);
     f32 thr_L, thr_R;
-    longitudinal_step(&thr_L, &thr_R, car->v, vst->v, nn_a, e_x, car->delta);
+    longitudinal_step(&thr_L, &thr_R, car->v, vst->v, plan->a, e_x, car->delta);
     cmd->motor_l = thr_L;
     cmd->motor_r = thr_R;
 }
@@ -109,7 +109,7 @@ void tasks_init(void) {
     {
         Waypoint g1, g2, g3;
         if (waypoint_mgr_get_window(&g_wp_mgr, &g1, &g2, &g3)) {
-            planner_forward(&g_vst, &g1, &g2, &g3, &g_nn_a, &g_nn_o);
+            planner_forward(&g_vst, &g1, &g2, &g3, &g_plan);
         }
     }
 
@@ -136,7 +136,7 @@ void car_control_update(void) {
 
     // ── 200Hz: 跟踪层 + 执行层 ──
     if (div200 == 0) {
-        tracking_layer_step(&g_cmd, &g_vst, &g_car, g_nn_a, g_nn_o);
+        tracking_layer_step(&g_cmd, &g_vst, &g_car, &g_plan);
         actuators_apply(&g_cmd);
     }
 }
@@ -149,7 +149,7 @@ static void task_20hz_planner(void) {
     }
     Waypoint g1, g2, g3;
     if (!waypoint_mgr_get_window(&g_wp_mgr, &g1, &g2, &g3)) return;
-    planner_forward(&g_vst, &g1, &g2, &g3, &g_nn_a, &g_nn_o);
+    planner_forward(&g_vst, &g1, &g2, &g3, &g_plan);
     g_vst_prev = g_vst;
 }
 
