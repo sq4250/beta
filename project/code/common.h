@@ -48,7 +48,7 @@ typedef struct { f32 left; f32 right; } Encoder;
 
 typedef struct {
     f32 gyro[3];             // 陀螺三轴 [rad/s] (已去 bias)
-    f32 accel[3];            // 加速度三轴 [m/s²] (预留)
+    f32 accel[3];            // 加速度三轴 [g] (预留, 校准用 g 单位)
     f32 quat[4];             // 四元数 [w,x,y,z]
     bool has_quat;           // 四元数是否有效
 } ImuData;

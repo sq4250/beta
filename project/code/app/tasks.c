@@ -39,12 +39,12 @@ static Encoder     g_enc;            // 编码器读数
 static WaypointMgr g_wp_mgr;        // 航点管理 (调用方持有)
 static ImuHandle   g_imu;
 static bool        g_ready;
+static volatile u32 g_ms;          // ISR tick 计数器 (1ms)
 //===================================================文件级状态===================================================
 
 //===================================================航点===================================================
 static const Waypoint g_waypoints[] = {
-    {4.0f, 0.0f}, {4.0f, 2.0f}, {0.0f, 2.0f}, {0.0f, 4.0f},
-    {2.0f, 6.0f}, {5.0f, 5.0f}, {6.0f, 2.0f}, {3.0f,-1.0f},
+    {2.0f, 0.0f}, {2.0f, 2.0f}, {0.0f, 2.0f}, {0.0f, 0.0f},
 };
 //===================================================航点===================================================
 
@@ -90,6 +90,7 @@ static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst,
     ref_frame_error(&e_x, &e_y, car, vst);
     f32 omega_cmd = lateral_step(car, vst, plan->omega, gyro_z, e_y);
     cmd->servo_delta = clamp(car->delta + omega_cmd * CTRL_DT, -DELTA_MAX, DELTA_MAX);
+
     f32 thr_l, thr_r;
     longitudinal_step(&thr_l, &thr_r, car->v, vst->v, plan->a, e_x, car->delta);
     cmd->motor_l = thr_l;
@@ -106,6 +107,7 @@ static void actuators_apply(const ActuatorCmd *cmd) {
 //===================================================初始化===================================================
 
 void tasks_init(void) {
+    gpio_init(P23_7, GPO, 1, GPO_PUSH_PULL);  // LED (低电平亮)
     hal_servo_init();
     hal_motor_init();
     hal_encoder_init();
@@ -134,22 +136,23 @@ void tasks_init(void) {
 
 void car_control_update(void) {
     if (!g_ready) return;
+    g_ms++;
 
     // ── 1kHz: IMU 采样 ──
     imu_read(&g_imu_data, g_imu);
 
-    // ── 编码器: 200Hz 读取, 其他 tick 保持 ──
-    static u8 div200 = 0;
-    if (++div200 >= 5) {
-        div200 = 0;
+    // ── 编码器: TRACKER_FREQ 读取, 其他 tick 保持 ──
+    static u8 div_trk = 0;
+    if (++div_trk >= TRACKER_DIV) {
+        div_trk = 0;
         hal_encoder_get(&g_enc);
     }
 
     // ── 1kHz: 状态估计 (测量 + 上周期控制量 → 5状态) ──
     car_estimate_update(&g_car, &g_imu_data, &g_enc, &g_cmd);
 
-    // ── 200Hz: 跟踪层 + 执行层 ──
-    if (div200 == 0) {
+    // ── TRACKER_FREQ: 跟踪层 + 执行层 ──
+    if (div_trk == 0) {
         tracking_layer_step(&g_cmd, &g_vst, &g_car, &g_plan,
                             g_imu_data.gyro[2]);
         actuators_apply(&g_cmd);
@@ -169,12 +172,13 @@ static void task_20hz_planner(void) {
 }
 
 static void task_10hz_debug(void) {
-    u32 wp_done = waypoint_mgr_reached_count(&g_wp_mgr);
-    (void)wp_done;
+    static bool hdr = true;
+    if (hdr) { printf("x[m],y[m],theta[rad]\r\n"); hdr = false; }
+    printf("%.3f,%.3f,%.4f\r\n", g_car.x, g_car.y, g_car.theta);
 }
 
 static void task_1hz_heartbeat(void) {
-    // LED toggle, watchdog
+    gpio_toggle_level(P23_7);  // LED 闪烁 (0.5Hz), 证明调度器存活
 }
 
 //===================================================任务表===================================================

@@ -17,8 +17,8 @@
 
 static bool init(f32 *acc_scale, f32 *gyro_scale) {
     if (imu660rc_init(IMU660RC_QUARTERNION_120HZ)) return false;
-    *acc_scale  = 1.0f;
-    *gyro_scale = 1.0f;
+    *acc_scale  = imu660rc_transition_factor[0];  // LSB/g
+    *gyro_scale = imu660rc_transition_factor[1];  // LSB/(deg/s)
     return true;
 }
 
@@ -43,8 +43,8 @@ const ImuDriver imu_660rc_driver = { init, read_raw, read_quat };
 
 static bool init(f32 *acc_scale, f32 *gyro_scale) {
     if (imu660rc_init(IMU660RC_QUARTERNION_DISABLE)) return false;
-    *acc_scale  = 1.0f;
-    *gyro_scale = 1.0f;
+    *acc_scale  = imu660rc_transition_factor[0];  // LSB/g
+    *gyro_scale = imu660rc_transition_factor[1];  // LSB/(deg/s)
     return true;
 }
 

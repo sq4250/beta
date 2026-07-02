@@ -3,12 +3,11 @@
  */
 #include "imu_660ra.h"
 #include "zf_common_headfile.h"
-#include <math.h>
 
 static bool init(f32 *acc_scale, f32 *gyro_scale) {
     if (imu660ra_init()) return false;
-    *acc_scale  = 1.0f;   // 因子由 hal_imu 管理, 这里返回1
-    *gyro_scale = 1.0f;
+    *acc_scale  = imu660ra_transition_factor[0];  // LSB/g  (校准用 g 单位, 匹配 IMU_ACC_NORM)
+    *gyro_scale = imu660ra_transition_factor[1];  // LSB/(deg/s) → hal_imu ×DEG2RAD → rad/s
     return true;
 }
 static void read_raw(i16 g[3], i16 a[3]) {

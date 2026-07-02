@@ -8,7 +8,7 @@
 static void lqr_lookup(f32 g[5], f32 v) {
     f32 vc = v;
     if (vc < LQR_V_MIN) vc = LQR_V_MIN;
-    if (vc > 3.0f) vc = 3.0f;
+    if (vc > 4.0f) vc = 4.0f;
 
     u32 lo = 0, hi = LQR_SPEED_POINTS - 1;
     while (lo < hi) {
