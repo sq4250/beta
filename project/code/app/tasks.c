@@ -29,6 +29,7 @@
 #include "core/waypoint_mgr.h"
 #include "core/kinematics.h"
 #include "car_comm.h"
+#include "hal_led.h"
 #include "utils.h"
 
 //===================================================文件级状态===================================================
@@ -128,6 +129,7 @@ void tasks_init(void) {
     hal_servo_init();
     hal_motor_init();
     hal_encoder_init();
+    hal_led_init();
     longitudinal_init();
     car_comm_init();
     g_imu = hal_imu_create(&imu_660ra_driver);
