@@ -103,7 +103,9 @@ static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst,
     cmd->servo_delta = clamp(car->delta + omega_cmd * CTRL_DT, -DELTA_MAX, DELTA_MAX);
 
     f32 a_ref = plan->a;
-    if ((vst->v <= 0.0f && a_ref < 0.0f) || (vst->v >= V_MAX && a_ref > 0.0f))
+    if (vst->v >= V_MAX && a_ref > 0.0f)
+        a_ref = 0.0f;
+    if (vst->v <= -V_MAX && a_ref < 0.0f)
         a_ref = 0.0f;
 
     f32 thr_l, thr_r;
