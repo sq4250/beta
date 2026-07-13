@@ -9,7 +9,7 @@
  * │ 执行层 (200Hz ISR)  舵机 PWM + 电机 PWM                │
  * └─────────────────────────────────────────────────────────┘
  *
- * 手动模式 (g_manual): 规划层用飞控 ax 替代 NN, ω≡0, 跟踪层不变
+ * 手动模式 (g_manual): 飞控世界速度 vn/vw [cm/s] → 机体前向投影 → P控制, ω≡0
  */
 
 #include "zf_common_headfile.h"
@@ -183,7 +183,7 @@ void car_control_update(void) {
 
 static void task_20hz_planner(void) {
     if (g_manual) {
-        /* 手动模式: 飞控 ax → 目标速度 [cm/s→m/s], a由P控制器产生, ω≡0 */
+        /* 手动模式: 飞控世界速度 vn/vw [cm/s] → 机体前向速度 → P控制, ω≡0 */
         static u32 s_last_seq = 0;
         static u32 s_stale    = 0;
         car_comm_rx_t rx = car_comm_get();
@@ -191,8 +191,10 @@ static void task_20hz_planner(void) {
             s_last_seq = rx.seq;
             s_stale    = 0;
         }
-        f32 v_des = rx.ax * 0.01f;                  /* cm/s → m/s */
-        if (++s_stale >= 10) v_des = 0.0f;           /* 500ms 超时 → 停车 */
+        /* 世界 NWU → 机体前向投影, cm/s → m/s */
+        f32 ct = cosf(g_car.theta), st = sinf(g_car.theta);
+        f32 v_des = (rx.vn * ct + rx.vw * st) * 0.01f;  /* cm/s → m/s */
+        if (++s_stale >= 10) v_des = 0.0f;               /* 500ms 超时 → 停车 */
         g_v_cmd    = v_des;
         g_plan.a    = clamp((v_des - g_vst.v) * 20.0f, -A_LONG_MAX, A_LONG_MAX);
         g_plan.omega = 0.0f;
@@ -247,17 +249,17 @@ static void task_10hz_debug(void) {
         hdr = false;
     }
     if (g_manual)
-        printf("%.3f,%.3f,%.3f,%.4f,%.3f,%.4f,%.4f\r\n",
+        printf("%.3f,%.1f,%.1f,%.4f,%.1f,%.1f,%.4f\r\n",
             (f32)g_ms * 0.001f,
             g_car.x, g_car.y, g_car.theta, g_car.v,
             g_v_cmd, g_car.delta);
     else
-        printf("%.3f,%.3f,%.3f,%.4f,%.3f,%.4f,%.4f,%.4f,%.3f,%.3f,%.4f\r\n",
+        printf("%.3f,%.1f,%.1f,%.4f,%.1f,%.4f,%.4f,%.4f,%.1f,%.1f,%.4f\r\n",
             (f32)g_ms * 0.001f,
             g_car.x, g_car.y, g_car.theta, g_car.v,
             g_ey, g_ex, g_car.delta,
             g_vst.x, g_vst.y, g_vst.theta);
-    car_comm_send(&g_car, g_ey);
+    car_comm_send(g_car.x * 100.0f, g_car.y * 100.0f);  /* m → cm */
 }
 
 static void task_1hz_heartbeat(void) {
