@@ -24,17 +24,17 @@ DT = 1/200; DT_OUTER = 0.05; SUB = 10  # 200Hz, 与 C 一致
 TOL = 0.05
 
 # LQR (横向)
-Q_HGD = 0.5; R_OMG = 0.05; WO_LQR = 50; ALPHA_LQR = 0.3
+Q_HGD = 0.3; R_OMG = 0.10; WO_LQR = 25; ALPHA_LQR = 0.4  # 保守阻尼
 
-# LADRC设计模型 (纵向): v_dot = -alpha*v + b0*throttle
-ALPHA = 2.0
-B0    = 7.0
+# LADRC设计模型 (纵向): v_dot = -alpha*v + b0*throttle  (与 config.h 一致)
+ALPHA = 1.5
+B0    = 30.0
 WO    = 15
-KP    = 8
-KD    = 6
+KP    = 16
+KD    = 8
 
-# 航点
-WP = np.array([[4,0],[4,2],[0,2],[0,4],[2,6],[5,5],[6,2],[3,-1]], dtype=np.float32)
+# 航点 (与实车测试一致的 2m×2m 正方形)
+WP = np.array([[2,0],[2,2],[0,2],[0,0]], dtype=np.float32)
 
 # ============================================================
 # NN模型
