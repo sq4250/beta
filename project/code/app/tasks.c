@@ -26,6 +26,7 @@
 #include "core/longitudinal.h"
 #include "core/waypoint_mgr.h"
 #include "core/kinematics.h"
+#include "car_comm.h"
 #include "utils.h"
 
 //===================================================文件级状态===================================================
@@ -41,7 +42,12 @@ static ImuHandle   g_imu;
 static bool        g_ready;
 static volatile u32 g_ms;          // ISR tick 计数器 (1ms)
 static f32         g_ey, g_ex;     // 车体坐标系跟踪误差 (ISR 写入, debug 读取)
+static f32         g_ax_cmd;       // 飞控指令加速度缓存 [m/s²]
 //===================================================文件级状态===================================================
+
+//===================================================手动模式开关===================================================
+static bool g_manual = true;  /* true=飞控ax直驱, false=NN自动驾驶 */
+//===================================================手动模式开关===================================================
 
 //===================================================航点===================================================
 static const Waypoint g_waypoints[] = {
@@ -119,6 +125,7 @@ void tasks_init(void) {
     hal_motor_init();
     hal_encoder_init();
     longitudinal_init();
+    car_comm_init();
     g_imu = hal_imu_create(&imu_660ra_driver);
     if (!g_imu) { while(1); }  // IMU 初始化失败 → 终止, 避免盲开
 
@@ -169,6 +176,22 @@ void car_control_update(void) {
 //===================================================主循环任务===================================================
 
 static void task_20hz_planner(void) {
+    if (g_manual) {
+        /* 手动模式: 飞控 ax → plan.a, ω≡0, 跟踪层自动跟上 */
+        static u32 s_last_seq = 0;
+        static u32 s_stale    = 0;
+        car_comm_rx_t rx = car_comm_get();
+        if (rx.seq != s_last_seq) {
+            s_last_seq = rx.seq;
+            s_stale    = 0;
+        }
+        g_ax_cmd = rx.ax * 0.01f;                  /* cm/s² → m/s² */
+        if (++s_stale >= 10) g_ax_cmd = -A_LONG_MAX; /* 500ms 超时 → 全力制动 */
+        g_plan.a    = clamp(g_ax_cmd, -A_LONG_MAX, A_LONG_MAX);
+        g_plan.omega = 0.0f;
+        return;
+    }
+
     if (waypoint_mgr_check_hit(&g_wp_mgr, &g_vst_prev, &g_vst)) {
         waypoint_mgr_mark_reached(&g_wp_mgr);
     }
@@ -213,14 +236,24 @@ static void task_10hz_debug(void) {
     static bool hdr = true;
     if (hdr) {
         printf("#bias=%.4fdeg/s\r\n", (double)(hal_imu_gyro_bias_z(g_imu) * 57.29578f));
-        printf("t[s],x[m],y[m],th[rad],v[m/s],ey[m],ex[m],delta[rad],vst_x[m],vst_y[m],vst_th[rad]\r\n");
+        if (g_manual)
+            printf("t[s],x[m],y[m],th[rad],v[m/s],ax_cmd[m/s2],delta[rad]\r\n");
+        else
+            printf("t[s],x[m],y[m],th[rad],v[m/s],ey[m],ex[m],delta[rad],vst_x[m],vst_y[m],vst_th[rad]\r\n");
         hdr = false;
     }
-    printf("%.3f,%.3f,%.3f,%.4f,%.3f,%.4f,%.4f,%.4f,%.3f,%.3f,%.4f\r\n",
-        (f32)g_ms * 0.001f,
-        g_car.x, g_car.y, g_car.theta, g_car.v,
-        g_ey, g_ex, g_car.delta,
-        g_vst.x, g_vst.y, g_vst.theta);
+    if (g_manual)
+        printf("%.3f,%.3f,%.3f,%.4f,%.3f,%.4f,%.4f\r\n",
+            (f32)g_ms * 0.001f,
+            g_car.x, g_car.y, g_car.theta, g_car.v,
+            g_ax_cmd, g_car.delta);
+    else
+        printf("%.3f,%.3f,%.3f,%.4f,%.3f,%.4f,%.4f,%.4f,%.3f,%.3f,%.4f\r\n",
+            (f32)g_ms * 0.001f,
+            g_car.x, g_car.y, g_car.theta, g_car.v,
+            g_ey, g_ex, g_car.delta,
+            g_vst.x, g_vst.y, g_vst.theta);
+    car_comm_send(&g_car, g_ey);
 }
 
 static void task_1hz_heartbeat(void) {
