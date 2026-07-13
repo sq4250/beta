@@ -2251,9 +2251,15 @@
         <file>
             <name>$PROJ_DIR$\..\..\code\hal\imu_660rc.c</name>
         </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\hal\hal_uart.c</name>
+        </file>
     </group>
     <group>
         <name>app</name>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\app\car_comm.c</name>
+        </file>
         <file>
             <name>$PROJ_DIR$\..\..\code\app\scheduler.c</name>
         </file>
