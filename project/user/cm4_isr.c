@@ -38,6 +38,7 @@
 #include "zf_common_headfile.h"
 #include "app/tasks.h"
 #include "hal_tick.h"
+#include "hal_uart.h"
 
 // **************************** PIT中断函数 ****************************
 void pit0_ch0_isr()                     // 定时器通道 0 周期中断服务函数
@@ -184,9 +185,7 @@ void uart2_isr (void)
 {
     if(uart_isr_mask(UART_2))            // 串口2接收中断
     {
-
-
-
+        hal_uart_rx_dispatch();          // 逐字节分发到 car_comm parser
     }
     else                                // 串口2发送中断
     {

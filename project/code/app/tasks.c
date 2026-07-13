@@ -8,6 +8,8 @@
  * │ 跟踪层 (200Hz ISR)  推进 VST, 时间同步 LQR+LADRC       │
  * │ 执行层 (200Hz ISR)  舵机 PWM + 电机 PWM                │
  * └─────────────────────────────────────────────────────────┘
+ *
+ * 手动模式 (g_manual): 规划层用飞控 ax 替代 NN, ω≡0, 跟踪层不变
  */
 
 #include "zf_common_headfile.h"
@@ -26,6 +28,7 @@
 #include "core/longitudinal.h"
 #include "core/waypoint_mgr.h"
 #include "core/kinematics.h"
+#include "car_comm.h"
 #include "utils.h"
 
 //===================================================文件级状态===================================================
@@ -34,14 +37,19 @@ static CarState    g_vst;
 static ImuData     g_imu_data;
 static ActuatorCmd g_cmd;
 static CarState    g_vst_prev;      // 上周期虚拟车起点 (航点线段检测, 复用 CarState)
-static PlannerAction g_plan;         // NN 动作 ZOH (20Hz 更新)
+static PlannerAction g_plan;         // 动作 ZOH (20Hz 更新)
 static Encoder     g_enc;            // 编码器读数
 static WaypointMgr g_wp_mgr;        // 航点管理 (调用方持有)
 static ImuHandle   g_imu;
 static bool        g_ready;
 static volatile u32 g_ms;          // ISR tick 计数器 (1ms)
 static f32         g_ey, g_ex;     // 车体坐标系跟踪误差 (ISR 写入, debug 读取)
+static f32         g_v_cmd;        // 飞控指令速度缓存 [m/s]
 //===================================================文件级状态===================================================
+
+//===================================================手动模式开关===================================================
+static bool g_manual = true;  /* true=飞控ax直驱, false=NN自动驾驶 */
+//===================================================手动模式开关===================================================
 
 //===================================================航点===================================================
 static const Waypoint g_waypoints[] = {
@@ -119,6 +127,7 @@ void tasks_init(void) {
     hal_motor_init();
     hal_encoder_init();
     longitudinal_init();
+    car_comm_init();
     g_imu = hal_imu_create(&imu_660ra_driver);
     if (!g_imu) { while(1); }  // IMU 初始化失败 → 终止, 避免盲开
 
@@ -128,7 +137,7 @@ void tasks_init(void) {
     g_vst = g_car;
     g_vst_prev = g_car;
 
-    {
+    if (!g_manual) {
         Waypoint g1, g2, g3;
         if (waypoint_mgr_get_window(&g_wp_mgr, &g1, &g2, &g3)) {
             planner_forward(&g_plan, &g_vst, &g1, &g2, &g3);
@@ -169,6 +178,23 @@ void car_control_update(void) {
 //===================================================主循环任务===================================================
 
 static void task_20hz_planner(void) {
+    if (g_manual) {
+        /* 手动模式: 飞控 ax → 目标速度 [cm/s→m/s], a由P控制器产生, ω≡0 */
+        static u32 s_last_seq = 0;
+        static u32 s_stale    = 0;
+        car_comm_rx_t rx = car_comm_get();
+        if (rx.seq != s_last_seq) {
+            s_last_seq = rx.seq;
+            s_stale    = 0;
+        }
+        f32 v_des = rx.ax * 0.01f;                  /* cm/s → m/s */
+        if (++s_stale >= 10) v_des = 0.0f;           /* 500ms 超时 → 停车 */
+        g_v_cmd    = v_des;
+        g_plan.a    = clamp((v_des - g_vst.v) * 20.0f, -A_LONG_MAX, A_LONG_MAX);
+        g_plan.omega = 0.0f;
+        return;
+    }
+
     if (waypoint_mgr_check_hit(&g_wp_mgr, &g_vst_prev, &g_vst)) {
         waypoint_mgr_mark_reached(&g_wp_mgr);
     }
@@ -186,13 +212,11 @@ static void task_10hz_debug(void) {
     static u32  wp_last_reached = 0;
     static f32  wp_min_d[MAX_WAYPOINTS];
     static u32  wp_active = 0;  // bitmask: 哪些航点正在被追踪
-    // 当前目标首次出现时激活追踪 + 重置 min_d
     u32 ci = g_wp_mgr.idx;
     if (ci < g_wp_mgr.count && !(wp_active & (1u << ci))) {
         wp_min_d[ci] = 1e9f;
         wp_active |= (1u << ci);
     }
-    // 更新所有活跃航点的最小距离 (包括已到达但未报告的)
     for (u32 i = 0; i < g_wp_mgr.count; ++i) {
         if (!(wp_active & (1u << i))) continue;
         f32 dx = g_car.x - g_wp_mgr.wps[i].x;
@@ -200,12 +224,11 @@ static void task_10hz_debug(void) {
         f32 d  = sqrtf(dx*dx + dy*dy);
         if (d < wp_min_d[i]) wp_min_d[i] = d;
     }
-    // 检测新到达的航点并报告, 报告后停止追踪该WP
     u32 reached_now = waypoint_mgr_reached_count(&g_wp_mgr);
     while (wp_last_reached < reached_now) {
         u32 i = wp_last_reached;
         printf("#WP%u min_d=%.4fm\n", i, (double)wp_min_d[i]);
-        wp_active &= ~(1u << i);  // 停止追踪, 释放 min_d
+        wp_active &= ~(1u << i);
         wp_last_reached++;
     }
 
@@ -213,14 +236,24 @@ static void task_10hz_debug(void) {
     static bool hdr = true;
     if (hdr) {
         printf("#bias=%.4fdeg/s\r\n", (double)(hal_imu_gyro_bias_z(g_imu) * 57.29578f));
-        printf("t[s],x[m],y[m],th[rad],v[m/s],ey[m],ex[m],delta[rad],vst_x[m],vst_y[m],vst_th[rad]\r\n");
+        if (g_manual)
+            printf("t[s],x[m],y[m],th[rad],v[m/s],v_cmd[m/s],delta[rad]\r\n");
+        else
+            printf("t[s],x[m],y[m],th[rad],v[m/s],ey[m],ex[m],delta[rad],vst_x[m],vst_y[m],vst_th[rad]\r\n");
         hdr = false;
     }
-    printf("%.3f,%.3f,%.3f,%.4f,%.3f,%.4f,%.4f,%.4f,%.3f,%.3f,%.4f\r\n",
-        (f32)g_ms * 0.001f,
-        g_car.x, g_car.y, g_car.theta, g_car.v,
-        g_ey, g_ex, g_car.delta,
-        g_vst.x, g_vst.y, g_vst.theta);
+    if (g_manual)
+        printf("%.3f,%.3f,%.3f,%.4f,%.3f,%.4f,%.4f\r\n",
+            (f32)g_ms * 0.001f,
+            g_car.x, g_car.y, g_car.theta, g_car.v,
+            g_v_cmd, g_car.delta);
+    else
+        printf("%.3f,%.3f,%.3f,%.4f,%.3f,%.4f,%.4f,%.4f,%.3f,%.3f,%.4f\r\n",
+            (f32)g_ms * 0.001f,
+            g_car.x, g_car.y, g_car.theta, g_car.v,
+            g_ey, g_ex, g_car.delta,
+            g_vst.x, g_vst.y, g_vst.theta);
+    car_comm_send(&g_car, g_ey);
 }
 
 static void task_1hz_heartbeat(void) {
