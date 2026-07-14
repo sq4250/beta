@@ -50,7 +50,7 @@ static f32         g_v_cmd;        // 飞控指令速度缓存 [m/s]
 //===================================================文件级状态===================================================
 
 //===================================================手动模式开关===================================================
-static bool g_manual = false;  /* true=飞控ax直驱, false=NN自动驾驶 */
+static bool g_manual = true;   /* true=飞控直驱(接收CMD 0x10), false=NN自动驾驶 */
 //===================================================手动模式开关===================================================
 
 //===================================================航点===================================================
@@ -203,7 +203,7 @@ void car_control_update(void) {
 
 static void task_20hz_planner(void) {
     if (g_manual) {
-        /* 手动模式: 飞控世界速度 vn/vw [cm/s] → 机体前向速度 → P控制, ω≡0 */
+        /* 手动模式: 接收飞控动作指令 (a, omega) 直灌 g_plan */
         static u32 s_last_seq = 0;
         static u32 s_stale    = 0;
         car_comm_rx_t rx = car_comm_get();
@@ -211,13 +211,15 @@ static void task_20hz_planner(void) {
             s_last_seq = rx.seq;
             s_stale    = 0;
         }
-        /* 世界 NWU → 机体前向投影, cm/s → m/s */
-        f32 ct = cosf(g_car.theta), st = sinf(g_car.theta);
-        f32 v_des = (rx.vn * ct + rx.vw * st) * 0.01f;  /* cm/s → m/s */
-        if (++s_stale >= 10) v_des = 0.0f;               /* 500ms 超时 → 停车 */
-        g_v_cmd    = v_des;
-        g_plan.a    = clamp((v_des - g_vst.v) * 20.0f, -A_LONG_MAX, A_LONG_MAX);
-        g_plan.omega = 0.0f;
+        if (++s_stale >= 10) {
+            /* 500ms 超时 -> 制动停车 */
+            g_plan.a     = -A_LONG_MAX;
+            g_plan.omega = 0.0f;
+        } else {
+            g_plan.a     = rx.a;
+            g_plan.omega = rx.omega;
+        }
+        g_v_cmd = g_vst.v;  /* 保持 debug 输出兼容 */
         return;
     }
 

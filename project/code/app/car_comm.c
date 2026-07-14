@@ -2,8 +2,9 @@
  * car_comm.c — 帧解析 + 帧打包
  *
  * 接收 (Schucker-Pilot → 车):
- *   AA 55 | 0x10 | len(8) | vn(f32) | vw(f32) | XOR   共 13 字节
- *   vn/vw 为世界系速度 [cm/s] (NWU)
+ *   AA 55 | 0x10 | len(8) | a(f32) | omega(f32) | XOR   共 13 字节
+ *   a:     纵向加速度 [m/s²]
+ *   omega: 前轮转角角速度 [rad/s]
  *
  * 发送 (车 → Schucker-Pilot):
  *   AA 55 | 0x20 | len(8) | world_x(f32) | world_y(f32) | XOR
@@ -47,8 +48,8 @@ static void car_comm_feed(u8 byte) {
     for (u8 j = 0; j < 2 + RX_LEN; j++) x ^= s_rx_buf[2 + j];
     if (x != s_rx_buf[RX_SIZE - 1]) return;
 
-    memcpy((void *)&s_rx.vn, &s_rx_buf[4], 4);
-    memcpy((void *)&s_rx.vw, &s_rx_buf[8], 4);
+    memcpy((void *)&s_rx.a, &s_rx_buf[4], 4);
+    memcpy((void *)&s_rx.omega, &s_rx_buf[8], 4);
     s_rx.seq++;
 }
 
