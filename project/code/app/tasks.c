@@ -50,7 +50,7 @@ static f32         g_v_cmd;        // 飞控指令速度缓存 [m/s]
 //===================================================文件级状态===================================================
 
 //===================================================手动模式开关===================================================
-static bool g_manual = true;  /* true=飞控ax直驱, false=NN自动驾驶 */
+static bool g_manual = false;  /* true=飞控ax直驱, false=NN自动驾驶 */
 //===================================================手动模式开关===================================================
 
 //===================================================航点===================================================
@@ -60,7 +60,7 @@ static bool g_manual = true;  /* true=飞控ax直驱, false=NN自动驾驶 */
 
 /* ── 待访问目标点集 (无序, TSP 排序后 → waypoint_mgr) ── */
 static const Waypoint g_targets[] = {
-    {2.0f, 0.0f}, {2.0f, 2.0f}, {0.0f, 2.0f}, {0.0f, 0.0f},
+    {1.21f, 0.50f}, {3.80f, 1.17f}, {2.63f, -2.0f}, {4.28f, -2.28f},{4.53f, -0.35f},
 };
 //===================================================航点===================================================
 
@@ -146,6 +146,13 @@ void tasks_init(void) {
     Waypoint wp_ordered[MAX_WAYPOINTS];
     tsp_solve(wp_ordered, g_targets, wp_count, CAR_START_X, CAR_START_Y);
 
+    /* 末尾追加原点: 遍历完所有目标后回到起点 */
+    if (wp_count < MAX_WAYPOINTS) {
+        wp_ordered[wp_count].x = CAR_START_X;
+        wp_ordered[wp_count].y = CAR_START_Y;
+        wp_count++;
+    }
+
     waypoint_mgr_init(&g_wp_mgr, wp_ordered, wp_count);
 
     g_vst = g_car;
@@ -180,6 +187,9 @@ void car_control_update(void) {
 
     // ── 1kHz: 状态估计 (测量 + 上周期控制量 → 5状态) ──
     car_estimate_update(&g_car, &g_imu_data, &g_enc, &g_cmd);
+
+    // ── 启动延迟: 等待 IMU 零偏稳定, 不执行控制 ──
+    if (g_ms < STARTUP_DELAY_MS) return;
 
     // ── TRACKER_FREQ: 跟踪层 + 执行层 ──
     if (div_trk == 0) {

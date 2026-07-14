@@ -11,7 +11,7 @@
 #define LED_DUTY_MAX   10000u
 
 void hal_led_init(void) {
-    pwm_init(LED_TCPWM_CH, LED_FREQ_HZ, 5000);  /* 50% 占空比 */
+    pwm_init(LED_TCPWM_CH, LED_FREQ_HZ, 100);  /* 1% 占空比 */
 }
 
 void hal_led_set(f32 brightness) {
