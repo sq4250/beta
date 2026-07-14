@@ -28,6 +28,7 @@
 #include "core/longitudinal.h"
 #include "core/waypoint_mgr.h"
 #include "core/kinematics.h"
+#include "core/tsp.h"
 #include "car_comm.h"
 #include "hal_led.h"
 #include "utils.h"
@@ -53,7 +54,12 @@ static bool g_manual = true;  /* true=飞控ax直驱, false=NN自动驾驶 */
 //===================================================手动模式开关===================================================
 
 //===================================================航点===================================================
-static const Waypoint g_waypoints[] = {
+/* ── 小车世界初始位置 (TSP 起点) ── */
+#define CAR_START_X  0.0f
+#define CAR_START_Y  0.0f
+
+/* ── 待访问目标点集 (无序, TSP 排序后 → waypoint_mgr) ── */
+static const Waypoint g_targets[] = {
     {2.0f, 0.0f}, {2.0f, 2.0f}, {0.0f, 2.0f}, {0.0f, 0.0f},
 };
 //===================================================航点===================================================
@@ -135,8 +141,12 @@ void tasks_init(void) {
     g_imu = hal_imu_create(&imu_660ra_driver);
     if (!g_imu) { while(1); }  // IMU 初始化失败 → 终止, 避免盲开
 
-    waypoint_mgr_init(&g_wp_mgr, g_waypoints,
-        sizeof(g_waypoints)/sizeof(g_waypoints[0]));
+    /* TSP 排序: 从小车初始位置出发, 最近邻贪心确定访问顺序 */
+    u32  wp_count = sizeof(g_targets) / sizeof(g_targets[0]);
+    Waypoint wp_ordered[MAX_WAYPOINTS];
+    tsp_solve(wp_ordered, g_targets, wp_count, CAR_START_X, CAR_START_Y);
+
+    waypoint_mgr_init(&g_wp_mgr, wp_ordered, wp_count);
 
     g_vst = g_car;
     g_vst_prev = g_car;

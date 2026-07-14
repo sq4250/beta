@@ -2227,6 +2227,9 @@
         <file>
             <name>$PROJ_DIR$\..\..\code\core\waypoint_mgr.c</name>
         </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\core\tsp.c</name>
+        </file>
     </group>
     <group>
         <name>hal</name>
