@@ -112,7 +112,7 @@ static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst,
     f32 a_ref = plan->a;
     if (vst->v >= V_MAX && a_ref > 0.0f)
         a_ref = 0.0f;
-    if (vst->v <= -V_MAX && a_ref < 0.0f)
+    if (vst->v <= 0.0f && a_ref < 0.0f)
         a_ref = 0.0f;
 
     f32 thr_l, thr_r;
