@@ -7,6 +7,7 @@
 #define TSP_H
 #include "car_state.h"
 #include "common.h"
+#include "config.h"
 
 /* ── 最近邻贪心: start → nearest → next nearest → ... → 所有点 ── */
 void tsp_solve(Waypoint *ordered, const Waypoint *unordered, u32 count,
