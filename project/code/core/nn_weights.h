@@ -1,5 +1,5 @@
 /* nn_weights.h — MicroNet v2 (8→80→48→2 ReLU, 4706 params)
-   Normalization fused into fc1. TOL=0.05, FullSim 96.9%, MCUSim 92.0% */
+   Normalization fused into fc1. a_max=0.5, o_max=14.0 */
 #ifndef NN_WEIGHTS_H
 #define NN_WEIGHTS_H
 #include "common.h"
@@ -610,5 +610,12 @@ static const f32 fc3_weight[] = {
 static const f32 fc3_bias[] = {
     0.06605614f, 0.32919064f,
 };
+
+#define NN_IN_DIM  8
+#define NN_H1_DIM 80
+#define NN_H2_DIM 48
+#define NN_OUT_DIM 2
+#define NN_A_MAX  0.5f
+#define NN_O_MAX 14.0f
 
 #endif

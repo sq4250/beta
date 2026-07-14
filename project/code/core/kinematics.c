@@ -9,7 +9,7 @@ void mcu_kinematics_step(CarState *s, f32 a_long, f32 omega) {
     s->v     += clamp(a_long, -A_LONG_MAX, A_LONG_MAX) * CTRL_DT;
     s->delta += clamp(omega, -OMEGA_DELTA_MAX, OMEGA_DELTA_MAX) * CTRL_DT;
 
-    s->v     = clamp(s->v,    -V_MAX,       V_MAX);  /* 允许后退 */
+    s->v     = clamp(s->v,    0,       V_MAX);  /* 不许后退 */
     s->delta = clamp(s->delta, -DELTA_MAX,  DELTA_MAX);
 
     s->theta += bicycle_curvature(s->v, s->delta) * CTRL_DT;
