@@ -1,56 +1,63 @@
 /**
  * car_comm.c — 帧解析 + 帧打包
  *
- * 接收 (Schucker-Pilot → 车):
- *   AA 55 | 0x10 | len(8) | vn(f32) | vw(f32) | XOR   共 13 字节
- *   vn: 世界北向速度 [cm/s]
- *   vw: 世界西向速度 [cm/s]
+ * 接收 (飞机→车, UART RX ISR):
+ *   CMD 0x10 ACCEL → 解析加速度指令 an, aw, vst_x, vst_y
  *
- * 发送 (车 → Schucker-Pilot):
- *   AA 55 | 0x20 | len(8) | world_x(f32) | world_y(f32) | XOR
- *   2×f32 = 8 字节 payload, 帧长 13 字节, 单位 cm
+ * 发送 (车→飞机, task 层调用):
+ *   CMD 0x20 POS → 世界位置 world_x, world_y (cm)
+ *
+ * 帧格式: AA 55 | CMD | LEN | PAYLOAD | XOR
+ *   ACCEL: LEN=16  21 字节
+ *   POS:   LEN=8   13 字节
  */
 #include "car_comm.h"
 #include "hal_uart.h"
 #include <string.h>
 
-/* ── 接收帧常量 ── */
-#define RX_HDR0  0xAA
-#define RX_HDR1  0x55
-#define RX_CMD   0x10
-#define RX_LEN   8
-#define RX_SIZE  13
-
-/* ── 发送帧常量 ── */
-#define TX_CMD   0x20
-#define TX_LEN   8    /* 2×f32 */
-#define TX_SIZE  13   /* 2(hdr) + 1(cmd) + 1(len) + 8(payload) + 1(xor) */
+/* ── 帧常量 ── */
+#define FRM_HDR0      0xAA
+#define FRM_HDR1      0x55
+#define FRM_CMD_ACCEL 0x10
+#define FRM_CMD_POS   0x20
+#define FRM_LEN       8
+#define FRM_SIZE      13   /* HDR0+HDR1+CMD+LEN+8B_PAYLOAD+XOR */
+#define ACCEL_LEN     16   /* an+aw+vst_x+vst_y = 4×f32 */
+#define ACCEL_SIZE    21   /* 2+1+1+16+1 */
+#define BUF_MAX       21
 
 static volatile car_comm_rx_t s_rx;
-static u8  s_rx_buf[RX_SIZE];
+static u8  s_rx_buf[BUF_MAX];
 static u8  s_rx_len;
 
-/* ── ISR 回调: 滑动窗口逐字节解析 ── */
+/* ── ISR 回调: 逐字节解析 ── */
 static void car_comm_feed(u8 byte) {
-    if (s_rx_len < RX_SIZE) {
+    u8 frame_size = (s_rx_len >= 3 && s_rx_buf[2] == FRM_CMD_ACCEL)
+                    ? ACCEL_SIZE : FRM_SIZE;
+
+    if (s_rx_len < frame_size) {
         s_rx_buf[s_rx_len++] = byte;
     } else {
-        memmove(s_rx_buf, s_rx_buf + 1, RX_SIZE - 1);
-        s_rx_buf[RX_SIZE - 1] = byte;
+        memmove(s_rx_buf, s_rx_buf + 1, s_rx_len - 1);
+        s_rx_buf[s_rx_len - 1] = byte;
     }
-    if (s_rx_len < RX_SIZE) return;
+    if (s_rx_len < frame_size) return;
 
-    if (s_rx_buf[0] != RX_HDR0 || s_rx_buf[1] != RX_HDR1) return;
-    if (s_rx_buf[2] != RX_CMD  || s_rx_buf[3] != RX_LEN)  return;
+    if (s_rx_buf[0] != FRM_HDR0 || s_rx_buf[1] != FRM_HDR1) return;
 
-    /* XOR 校验: bytes [2..11] */
+    /* ── CMD 0x10: ACCEL + VST (飞机→车) ── */
+    if (s_rx_buf[2] != FRM_CMD_ACCEL || s_rx_buf[3] != ACCEL_LEN) return;
+
     u8 x = 0;
-    for (u8 j = 0; j < 2 + RX_LEN; j++) x ^= s_rx_buf[2 + j];
-    if (x != s_rx_buf[RX_SIZE - 1]) return;
+    for (u8 j = 0; j < 2 + ACCEL_LEN; j++) x ^= s_rx_buf[2 + j];
+    if (x != s_rx_buf[ACCEL_SIZE - 1]) return;
 
-    memcpy((void *)&s_rx.a, &s_rx_buf[4], 4);
-    memcpy((void *)&s_rx.omega, &s_rx_buf[8], 4);
+    memcpy((void *)&s_rx.a,     &s_rx_buf[4],  4);
+    memcpy((void *)&s_rx.omega, &s_rx_buf[8],  4);
+    memcpy((void *)&s_rx.vst_x, &s_rx_buf[12], 4);
+    memcpy((void *)&s_rx.vst_y, &s_rx_buf[16], 4);
     s_rx.seq++;
+    s_rx_len = 0;
 }
 
 void car_comm_init(void) {
@@ -72,24 +79,22 @@ car_comm_rx_t car_comm_get(void) {
     return out;
 }
 
-/* ── 打包发送: 世界位置 cm → 13 字节帧 → UART2 ── */
+/* ── 打包发送: 世界位置 cm → CMD 0x20 帧 → UART ── */
 void car_comm_send(f32 world_x, f32 world_y) {
-    u8  frame[TX_SIZE];
-    u8  xor_val;
-    u8  i;
+    u8 frame[FRM_SIZE];
+    u8 i, xor_val;
 
-    frame[0] = RX_HDR0;
-    frame[1] = RX_HDR1;
-    frame[2] = TX_CMD;
-    frame[3] = TX_LEN;
+    frame[0] = FRM_HDR0;
+    frame[1] = FRM_HDR1;
+    frame[2] = FRM_CMD_POS;
+    frame[3] = FRM_LEN;
 
     memcpy(&frame[4], &world_x, sizeof(f32));
     memcpy(&frame[8], &world_y, sizeof(f32));
 
-    /* XOR over cmd + len + payload */
     xor_val = 0;
-    for (i = 0; i < 2 + TX_LEN; i++) xor_val ^= frame[2 + i];
-    frame[TX_SIZE - 1] = xor_val;
+    for (i = 0; i < 2 + FRM_LEN; i++) xor_val ^= frame[2 + i];
+    frame[FRM_SIZE - 1] = xor_val;
 
-    hal_uart_send(frame, TX_SIZE);
+    hal_uart_send(frame, FRM_SIZE);
 }
