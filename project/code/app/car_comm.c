@@ -2,9 +2,9 @@
  * car_comm.c — 帧解析 + 帧打包
  *
  * 接收 (Schucker-Pilot → 车):
- *   AA 55 | 0x10 | len(8) | a(f32) | omega(f32) | XOR   共 13 字节
- *   a:     纵向加速度 [m/s²]
- *   omega: 前轮转角角速度 [rad/s]
+ *   AA 55 | 0x10 | len(8) | vn(f32) | vw(f32) | XOR   共 13 字节
+ *   vn: 世界北向速度 [cm/s]
+ *   vw: 世界西向速度 [cm/s]
  *
  * 发送 (车 → Schucker-Pilot):
  *   AA 55 | 0x20 | len(8) | world_x(f32) | world_y(f32) | XOR

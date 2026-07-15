@@ -203,7 +203,8 @@ void car_control_update(void) {
 
 static void task_20hz_planner(void) {
     if (g_manual) {
-        /* 手动模式: 接收飞控动作指令 (a, omega) 直灌 g_plan */
+        /* 手动模式: 接收飞控世界速度 (vn, vw) [cm/s], 转为加速度控制
+           车端 heading_ctrl 锁 yaw=0° (北), 故世界北=车体前向 */
         static u32 s_last_seq = 0;
         static u32 s_stale    = 0;
         car_comm_rx_t rx = car_comm_get();
@@ -213,13 +214,15 @@ static void task_20hz_planner(void) {
         }
         if (++s_stale >= 10) {
             /* 500ms 超时 -> 制动停车 */
-            g_plan.a     = -A_LONG_MAX;
+            g_plan.a     = -10.0f;  /* 超时强制动 */
             g_plan.omega = 0.0f;
         } else {
-            g_plan.a     = rx.a;
-            g_plan.omega = rx.omega;
+            f32 v_cmd = rx.a * 0.01f;   /* cm/s → m/s, 北=前向 */
+            f32 v_err = v_cmd - g_vst.v;
+            g_plan.a     = clamp(v_err * 3.0f, -A_MANUAL_MAX, A_MANUAL_MAX);
+            g_plan.omega = 0.0f;
         }
-        g_v_cmd = g_vst.v;  /* 保持 debug 输出兼容 */
+        g_v_cmd = rx.a * 0.01f;  /* debug: 记录期望速度 [m/s] */
         return;
     }
 
@@ -228,7 +231,7 @@ static void task_20hz_planner(void) {
     }
     Waypoint g1, g2, g3;
     if (!waypoint_mgr_get_window(&g_wp_mgr, &g1, &g2, &g3)) {
-        g_plan.a = -A_LONG_MAX; g_plan.omega = 0.0f;  // 航点耗尽 → 最大制动停车
+        g_plan.a = -10.0f; g_plan.omega = 0.0f;  // 航点耗尽 → 强制动停车
         return;
     }
     planner_forward(&g_plan, &g_vst, &g1, &g2, &g3);
@@ -260,27 +263,16 @@ static void task_10hz_debug(void) {
         wp_last_reached++;
     }
 
-    // ── 常规状态输出 ──
+    // ── 加速度输出: IMU 实际 vs 目标 ──
     static bool hdr = true;
     if (hdr) {
-        printf("#bias=%.4fdeg/s\r\n", (double)(hal_imu_gyro_bias_z(g_imu) * 57.29578f));
-        if (g_manual)
-            printf("t[s],x[m],y[m],th[rad],v[m/s],v_cmd[m/s],delta[rad]\r\n");
-        else
-            printf("t[s],x[m],y[m],th[rad],v[m/s],ey[m],ex[m],delta[rad],vst_x[m],vst_y[m],vst_th[rad]\r\n");
+        printf("t[s],ax[g],ay[g],az[g],a_tgt[m/s2]\r\n");
         hdr = false;
     }
-    if (g_manual)
-        printf("%.3f,%.1f,%.1f,%.4f,%.1f,%.1f,%.4f\r\n",
-            (f32)g_ms * 0.001f,
-            g_car.x, g_car.y, g_car.theta, g_car.v,
-            g_v_cmd, g_car.delta);
-    else
-        printf("%.3f,%.1f,%.1f,%.4f,%.1f,%.4f,%.4f,%.4f,%.1f,%.1f,%.4f\r\n",
-            (f32)g_ms * 0.001f,
-            g_car.x, g_car.y, g_car.theta, g_car.v,
-            g_ey, g_ex, g_car.delta,
-            g_vst.x, g_vst.y, g_vst.theta);
+    printf("%.3f,%.4f,%.4f,%.4f,%.3f\r\n",
+        (f32)g_ms * 0.001f,
+        g_imu_data.accel[0], g_imu_data.accel[1], g_imu_data.accel[2],
+        g_plan.a);
     car_comm_send(g_car.x * 100.0f, g_car.y * 100.0f);  /* m → cm */
 }
 

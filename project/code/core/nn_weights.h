@@ -615,7 +615,6 @@ static const f32 fc3_bias[] = {
 #define NN_H1_DIM 80
 #define NN_H2_DIM 48
 #define NN_OUT_DIM 2
-#define NN_A_MAX  1.0f
 #define NN_O_MAX 14.0f
 
 #endif
