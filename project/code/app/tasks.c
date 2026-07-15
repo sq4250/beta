@@ -224,6 +224,9 @@ static void task_20hz_planner(void) {
 
     g_plan.a     = clamp(rx.a * 0.01f, -A_MANUAL_MAX, A_MANUAL_MAX);
     g_plan.omega = clamp(rx.omega, -OMEGA_DELTA_MAX, OMEGA_DELTA_MAX);
+
+    // ── 回传惯导坐标 (m→cm) ──
+    car_comm_send(g_car.x * 100.0f, g_car.y * 100.0f);
 }
 
 static void task_10hz_debug(void) {
