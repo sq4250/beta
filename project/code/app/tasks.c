@@ -54,6 +54,7 @@ static f32         g_v_cmd;
 static bool g_manual = true;
 //===================================================手动模式开关===================================================
 
+
 //===================================================航点===================================================
 #define CAR_START_X  0.0f
 #define CAR_START_Y  0.0f
@@ -120,6 +121,31 @@ static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst,
 static void actuators_apply(const ActuatorCmd *cmd) {
     hal_servo_set_delta(cmd->servo_delta);
     hal_motor_set_thr(cmd->motor_l, cmd->motor_r);
+}
+
+//===================================================跟踪重启 (新会话首帧)===================================================
+
+static void tracking_restart(void) {
+    g_ready = false;
+
+    // VST 归零 — 车端自己积分，不从飞机同步
+    g_vst      = (CarState){0};
+    g_vst_prev = (CarState){0};
+
+    // 惯导归零 — 估计位置/速度/航向清零
+    g_car = (CarState){0};
+    estimator_reset();
+
+    // 纵向控制器状态归零 — LESO 重新收敛
+    longitudinal_init();
+
+    // 编码器重新取基线
+    hal_encoder_get(&g_enc);
+
+    // 指令清零 — 等下一帧覆盖
+    g_plan = (PlannerAction){0};
+
+    g_ready = true;
 }
 
 //===================================================初始化===================================================
@@ -190,6 +216,12 @@ void car_control_update(void) {
 
 static void task_20hz_planner(void) {
     car_comm_rx_t rx = car_comm_get();
+
+    // ── 停止跟踪 = 直接重置 VST + 惯导 ──
+    if (car_comm_reset_pending()) {
+        tracking_restart();
+    }
+
     g_plan.a     = clamp(rx.a * 0.01f, -A_MANUAL_MAX, A_MANUAL_MAX);
     g_plan.omega = clamp(rx.omega, -OMEGA_DELTA_MAX, OMEGA_DELTA_MAX);
 }

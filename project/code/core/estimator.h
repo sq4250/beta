@@ -11,5 +11,6 @@
 
 void car_estimate_update(CarState *car, const ImuData *imu,
                          const Encoder *enc, const ActuatorCmd *cmd);
+void estimator_reset(void);   /* 重置内部 EMA 滤波状态 */
 
 #endif

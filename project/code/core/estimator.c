@@ -7,6 +7,10 @@
 
 static f32 g_v_filt = 0.0f;  // EMA 滤波速度
 
+void estimator_reset(void) {
+    g_v_filt = 0.0f;
+}
+
 void car_estimate_update(CarState *car, const ImuData *imu,
                          const Encoder *enc, const ActuatorCmd *cmd
     ) {
