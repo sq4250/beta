@@ -216,7 +216,7 @@ static void task_20hz_planner(void) {
         f32 v_des = (rx.vn * ct + rx.vw * st) * 0.01f;  /* cm/s → m/s */
         if (++s_stale >= 10) v_des = 0.0f;               /* 500ms 超时 → 停车 */
         g_v_cmd    = v_des;
-        g_plan.a    = clamp((v_des - g_vst.v) * 20.0f, -A_LONG_MAX, A_LONG_MAX);
+        g_plan.a    = clamp((v_des - g_vst.v) * 20.0f, -A_BRAKE_MAX, A_LONG_MAX);
         g_plan.omega = 0.0f;
         return;
     }
@@ -226,7 +226,7 @@ static void task_20hz_planner(void) {
     }
     Waypoint g1, g2, g3;
     if (!waypoint_mgr_get_window(&g_wp_mgr, &g1, &g2, &g3)) {
-        g_plan.a = -A_LONG_MAX; g_plan.omega = 0.0f;  // 航点耗尽 → 最大制动停车
+        g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f;  // 航点耗尽 → 最大制动停车
         return;
     }
     planner_forward(&g_plan, &g_vst, &g1, &g2, &g3);
