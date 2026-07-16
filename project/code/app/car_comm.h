@@ -2,7 +2,7 @@
  * car_comm.h — 车-飞机通信协议
  *
  * 接收帧 (飞机→车):
- *   CMD 0x10 ACCEL    an,aw,vst_x,vst_y (LEN=16, f32×4, cm/s², cm)
+ *   CMD 0x10 ACT      a, omega (LEN=8, f32×2, cm/s², rad/s)
  *
  * 发送帧 (车→飞机):
  *   CMD 0x20 POS      世界位置 world_x,world_y (LEN=8, f32×2, cm)
@@ -12,10 +12,9 @@
 #include "common.h"
 #include "car_state.h"
 
-/* ── 飞机发来的指令 + VST 位置 ── */
+/* ── 飞机发来的动作指令 ── */
 typedef struct {
-    f32 a, omega;     /* CMD 0x10: an[cm/s²], omega[rad/s] */
-    f32 vst_x, vst_y; /* 飞机 VST 位置 cm, 车端用于同步 */
+    f32 a, omega;     /* CMD 0x10: a[cm/s²], omega[rad/s] */
     u32 seq;           /* 帧序号 */
 } car_comm_rx_t;
 

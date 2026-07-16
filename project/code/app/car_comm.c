@@ -2,14 +2,14 @@
  * car_comm.c — 帧解析 + 帧打包
  *
  * 接收 (飞机→车, UART RX ISR):
- *   CMD 0x10 ACCEL → 解析加速度指令 an, aw, vst_x, vst_y
+ *   CMD 0x10 ACT → 解析动作指令 a, omega
  *
  * 发送 (车→飞机, task 层调用):
  *   CMD 0x20 POS → 世界位置 world_x, world_y (cm)
  *
  * 帧格式: AA 55 | CMD | LEN | PAYLOAD | XOR
- *   ACCEL: LEN=16  21 字节
- *   POS:   LEN=8   13 字节
+ *   ACT: LEN=8   13 字节
+ *   POS: LEN=8   13 字节
  */
 #include "car_comm.h"
 #include "hal_uart.h"
@@ -18,13 +18,13 @@
 /* ── 帧常量 ── */
 #define FRM_HDR0      0xAA
 #define FRM_HDR1      0x55
-#define FRM_CMD_ACCEL 0x10
+#define FRM_CMD_ACT   0x10
 #define FRM_CMD_POS   0x20
 #define FRM_LEN       8
 #define FRM_SIZE      13   /* HDR0+HDR1+CMD+LEN+8B_PAYLOAD+XOR */
-#define ACCEL_LEN     16   /* an+aw+vst_x+vst_y = 4×f32 */
-#define ACCEL_SIZE    21   /* 2+1+1+16+1 */
-#define BUF_MAX       21
+#define ACT_LEN       8    /* a+omega = 2×f32 */
+#define ACT_SIZE      13   /* 2+1+1+8+1 */
+#define BUF_MAX       13
 
 static volatile car_comm_rx_t s_rx;
 static u8  s_rx_buf[BUF_MAX];
@@ -32,30 +32,25 @@ static u8  s_rx_len;
 
 /* ── ISR 回调: 逐字节解析 ── */
 static void car_comm_feed(u8 byte) {
-    u8 frame_size = (s_rx_len >= 3 && s_rx_buf[2] == FRM_CMD_ACCEL)
-                    ? ACCEL_SIZE : FRM_SIZE;
-
-    if (s_rx_len < frame_size) {
+    if (s_rx_len < FRM_SIZE) {
         s_rx_buf[s_rx_len++] = byte;
     } else {
         memmove(s_rx_buf, s_rx_buf + 1, s_rx_len - 1);
         s_rx_buf[s_rx_len - 1] = byte;
     }
-    if (s_rx_len < frame_size) return;
+    if (s_rx_len < FRM_SIZE) return;
 
     if (s_rx_buf[0] != FRM_HDR0 || s_rx_buf[1] != FRM_HDR1) return;
 
-    /* ── CMD 0x10: ACCEL + VST (飞机→车) ── */
-    if (s_rx_buf[2] != FRM_CMD_ACCEL || s_rx_buf[3] != ACCEL_LEN) return;
+    /* ── CMD 0x10: ACT (飞机→车) ── */
+    if (s_rx_buf[2] != FRM_CMD_ACT || s_rx_buf[3] != ACT_LEN) return;
 
     u8 x = 0;
-    for (u8 j = 0; j < 2 + ACCEL_LEN; j++) x ^= s_rx_buf[2 + j];
-    if (x != s_rx_buf[ACCEL_SIZE - 1]) return;
+    for (u8 j = 0; j < 2 + ACT_LEN; j++) x ^= s_rx_buf[2 + j];
+    if (x != s_rx_buf[ACT_SIZE - 1]) return;
 
-    memcpy((void *)&s_rx.a,     &s_rx_buf[4],  4);
-    memcpy((void *)&s_rx.omega, &s_rx_buf[8],  4);
-    memcpy((void *)&s_rx.vst_x, &s_rx_buf[12], 4);
-    memcpy((void *)&s_rx.vst_y, &s_rx_buf[16], 4);
+    memcpy((void *)&s_rx.a,     &s_rx_buf[4], 4);
+    memcpy((void *)&s_rx.omega, &s_rx_buf[8], 4);
     s_rx.seq++;
     s_rx_len = 0;
 }
