@@ -6,7 +6,7 @@
 #include "utils.h"
 
 void mcu_kinematics_step(CarState *s, f32 a_long, f32 omega) {
-    s->v     += a_long * CTRL_DT;
+    s->v     += clamp(a_long, -A_BRAKE_MAX, A_LONG_MAX) * CTRL_DT;
     s->delta += clamp(omega, -OMEGA_DELTA_MAX, OMEGA_DELTA_MAX) * CTRL_DT;
 
     s->v     = clamp(s->v,    0,       V_MAX);  /* 不许后退 */

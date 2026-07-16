@@ -2,7 +2,7 @@
  * car_comm.h — 车-飞机通信协议
  *
  * 接收帧 (飞机→车):
- *   CMD 0x10 ACT      a, omega (LEN=8, f32×2, cm/s², rad/s)
+ *   CMD 0x10 ACT      vn, vw (LEN=8, f32×2, cm/s)  世界速度 NWU
  *
  * 发送帧 (车→飞机):
  *   CMD 0x20 POS      世界位置 world_x,world_y (LEN=8, f32×2, cm)
@@ -14,7 +14,7 @@
 
 /* ── 飞机发来的动作指令 ── */
 typedef struct {
-    f32 a, omega;     /* CMD 0x10: a[cm/s²], omega[rad/s] */
+    f32 vn, vw;       /* CMD 0x10: 世界速度 NWU [cm/s] */
     u32 seq;           /* 帧序号 */
 } car_comm_rx_t;
 

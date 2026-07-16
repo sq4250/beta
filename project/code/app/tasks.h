@@ -7,8 +7,8 @@
 
 #include "common.h"
 
-// 任务数: planner(20Hz) + debug(10Hz) + state(5Hz) + heartbeat(1Hz)
-#define TASK_NUM    4
+// 任务数: planner(20Hz) + debug(10Hz) + heartbeat(1Hz)
+#define TASK_NUM    3
 
 typedef struct {
     void (*run)(void);

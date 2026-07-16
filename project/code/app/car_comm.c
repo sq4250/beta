@@ -2,13 +2,13 @@
  * car_comm.c — 帧解析 + 帧打包
  *
  * 接收 (飞机→车, UART RX ISR):
- *   CMD 0x10 ACT → 解析动作指令 a, omega
+ *   CMD 0x10 ACT → 解析世界速度指令 vn, vw
  *
  * 发送 (车→飞机, task 层调用):
  *   CMD 0x20 POS → 世界位置 world_x, world_y (cm)
  *
  * 帧格式: AA 55 | CMD | LEN | PAYLOAD | XOR
- *   ACT: LEN=8   13 字节
+ *   ACT: LEN=8   13 字节  (vn+vw = 2×f32 cm/s)
  *   POS: LEN=8   13 字节
  */
 #include "car_comm.h"
@@ -22,7 +22,7 @@
 #define FRM_CMD_POS   0x20
 #define FRM_LEN       8
 #define FRM_SIZE      13   /* HDR0+HDR1+CMD+LEN+8B_PAYLOAD+XOR */
-#define ACT_LEN       8    /* a+omega = 2×f32 */
+#define ACT_LEN       8    /* vn+vw = 2×f32 */
 #define ACT_SIZE      13   /* 2+1+1+8+1 */
 #define BUF_MAX       13
 
@@ -49,8 +49,8 @@ static void car_comm_feed(u8 byte) {
     for (u8 j = 0; j < 2 + ACT_LEN; j++) x ^= s_rx_buf[2 + j];
     if (x != s_rx_buf[ACT_SIZE - 1]) return;
 
-    memcpy((void *)&s_rx.a,     &s_rx_buf[4], 4);
-    memcpy((void *)&s_rx.omega, &s_rx_buf[8], 4);
+    memcpy((void *)&s_rx.vn, &s_rx_buf[4], 4);
+    memcpy((void *)&s_rx.vw, &s_rx_buf[8], 4);
     s_rx.seq++;
     s_rx_len = 0;
 }
