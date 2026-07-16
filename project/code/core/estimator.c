@@ -3,6 +3,7 @@
  */
 #include "estimator.h"
 #include "config.h"
+#include "utils.h"
 #include <math.h>
 
 static f32 g_v_filt = 0.0f;  // EMA 滤波速度
@@ -12,8 +13,10 @@ void car_estimate_update(CarState *car, const ImuData *imu,
     ) {
     // ── 偏航融合 ──
     if (imu->has_quat) {
-        f32 yq = atan2f(2.0f*(imu->quat[0]*imu->quat[3]+imu->quat[1]*imu->quat[2]),
-                        1.0f-2.0f*(imu->quat[2]*imu->quat[2]+imu->quat[3]*imu->quat[3]));
+        const f32 *q = imu->quat;
+        f32 yq = atan2f(2.0f*(q[0]*q[1] + q[2]*q[3]),
+                        1.0f - 2.0f*(q[0]*q[0] + q[2]*q[2]));
+        yq = wrap_pi(M_PI_F - yq);  /* 180°偏移 + 符号翻转 (NWU右手系, Z↑逆时针为正) */
         car->theta = IMU_YAW_ALPHA * (car->theta + imu->gyro[2] * ISR_DT)
                    + (1.0f - IMU_YAW_ALPHA) * yq;
     } else {

@@ -34,7 +34,10 @@ KP    = 16
 KD    = 8
 
 # 航点 (与实车测试一致的 2m×2m 正方形)
-WP = np.array([[2,0],[2,2],[0,2],[0,0]], dtype=np.float32)
+WP_ORIGINAL = np.array([[2,0],[2,2],[0,2],[0,0]], dtype=np.float32)
+N_ROUNDS = 10
+WP = np.tile(WP_ORIGINAL, (N_ROUNDS, 1)).astype(np.float32)
+TOTAL_TIME = 80.0  # 10圈总时间预算
 
 # ============================================================
 # NN模型
@@ -88,13 +91,14 @@ ey_log=[]; ex_log=[]
 
 vst_prev_seg = vst[:2].copy()  # 上周期起点 (与C一致)
 
-for ctrl in range(int(12/DT_OUTER)):
+for ctrl in range(int(TOTAL_TIME/DT_OUTER)):
     t=ctrl*DT_OUTER
     # ① 检测上一周期虚拟轨迹是否穿过航点 (与C一致)
     if wpi<len(WP) and not reached[wpi] and check_hit_substep(vst_prev_seg, vst[:2], WP[wpi], TOL):
         d = np.hypot(rs[0]-WP[wpi][0], rs[1]-WP[wpi][1])
         reached[wpi]=True; wpi+=1
-        print(f'  WP{wpi-1} @t={t:.2f}s  real_dist={d:.3f}m')
+        current_round = wpi // len(WP_ORIGINAL) + 1
+        print(f'  Round{current_round} WP{(wpi-1)%len(WP_ORIGINAL)} @t={t:.2f}s  real_dist={d:.3f}m')
     while wpi<len(WP) and reached[wpi]: wpi+=1
     if wpi>=len(WP): break
     # ② 获取窗口 + NN前向
@@ -139,7 +143,8 @@ for ctrl in range(int(12/DT_OUTER)):
         ey_log.append(ey); ex_log.append(ex)
 
 eya=np.array(ey_log); exa=np.array(ex_log)
-print(f'eyRMS={np.sqrt(np.mean(eya**2)):.4f}m  exRMS={np.sqrt(np.mean(exa**2)):.4f}m  wps={sum(reached)}')
+rounds_completed = sum(reached) // len(WP_ORIGINAL)
+print(f'eyRMS={np.sqrt(np.mean(eya**2)):.4f}m  exRMS={np.sqrt(np.mean(exa**2)):.4f}m  rounds={rounds_completed}/{N_ROUNDS}  wps={sum(reached)}/{len(WP)}')
 print(f'LADRC: alpha={ALPHA} b0={B0} wo={WO} kp={KP} kd={KD}')
 print(f'LQR:   q_hdg={Q_HGD} r={R_OMG} wo_lqr={WO_LQR}')
 
@@ -150,7 +155,7 @@ vst2=np.zeros(5,dtype=np.float32); rs2=np.zeros(5,dtype=np.float32)
 wpi2=0; reached2=np.zeros(len(WP),bool)
 nn_a2=nn_omg2=0.; z12=0.; fh2=0.; up2=0.
 vst_prev_seg2 = vst2[:2].copy()
-for ctrl in range(int(12/DT_OUTER)):
+for ctrl in range(int(TOTAL_TIME/DT_OUTER)):
     if wpi2<len(WP) and not reached2[wpi2] and check_hit_substep(vst_prev_seg2, vst2[:2], WP[wpi2], TOL):
         reached2[wpi2]=True; wpi2+=1
     while wpi2<len(WP) and reached2[wpi2]: wpi2+=1
@@ -181,14 +186,14 @@ fvx=np.array(fvx);fvy=np.array(fvy);frx=np.array(frx);fry=np.array(fry)
 fey=np.array(fey);fex=np.array(fex); ft2=np.linspace(0,len(fvx)*DT_OUTER,len(fvx))
 
 fig,(ax1,ax2)=plt.subplots(1,2,figsize=(13,5.5))
-fig.suptitle(f'LQR+LADRC (alpha={ALPHA} b0={B0}) | eyRMS={np.sqrt(np.mean(fey**2)):.3f}m exRMS={np.sqrt(np.mean(fex**2)):.3f}m',fontsize=10)
+fig.suptitle(f'LQR+LADRC (alpha={ALPHA} b0={B0}) {N_ROUNDS} Rounds | eyRMS={np.sqrt(np.mean(fey**2)):.3f}m exRMS={np.sqrt(np.mean(fex**2)):.3f}m',fontsize=10)
 ax1.plot(WP[:,0],WP[:,1],'s-',color='gray',ms=8,alpha=.4,label='wp')
 ax1.set_xlim(-1,8);ax1.set_ylim(-2,8);ax1.set_aspect('equal')
 ax1.set_xlabel('X (m)');ax1.set_ylabel('Y (m)');ax1.legend(fontsize=8)
 vtr,=ax1.plot([],[],'b-',lw=1.5,alpha=.6,label='virtual')
 rtr,=ax1.plot([],[],'r-',lw=2.,alpha=.9,label='real')
 vd,=ax1.plot([],[],'bo',ms=6);rd,=ax1.plot([],[],'r.',ms=8)
-ax2.set_xlim(0,12);ax2.set_ylim(-0.3,0.3)
+ax2.set_xlim(0,TOTAL_TIME);ax2.set_ylim(-0.3,0.3)
 ax2.set_xlabel('t (s)');ax2.set_ylabel('error (m)')
 ax2.axhline(0,color='gray',lw=.5)
 el,=ax2.plot([],[],'r-',lw=1.5,label='e_y')

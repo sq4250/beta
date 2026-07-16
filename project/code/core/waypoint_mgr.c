@@ -43,3 +43,8 @@ u32 waypoint_mgr_reached_count(const WaypointMgr *mgr) {
     for (u32 i = 0; i < mgr->count; ++i) if (mgr->reached[i]) n++;
     return n;
 }
+
+void waypoint_mgr_reset(WaypointMgr *mgr) {
+    mgr->idx = 0;
+    for (u32 i = 0; i < mgr->count; ++i) mgr->reached[i] = false;
+}

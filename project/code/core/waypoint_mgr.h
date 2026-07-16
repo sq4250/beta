@@ -20,5 +20,6 @@ bool waypoint_mgr_get_window(WaypointMgr *mgr, Waypoint *g1, Waypoint *g2, Waypo
 void waypoint_mgr_mark_reached(WaypointMgr *mgr);
 bool waypoint_mgr_check_hit(const WaypointMgr *mgr, const CarState *prev, const CarState *next);
 u32  waypoint_mgr_reached_count(const WaypointMgr *mgr);
+void waypoint_mgr_reset(WaypointMgr *mgr);
 
 #endif

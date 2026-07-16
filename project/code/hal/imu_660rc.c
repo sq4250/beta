@@ -16,7 +16,7 @@
 #if IMU660RC_QUAT_MODE
 
 static bool init(f32 *acc_scale, f32 *gyro_scale) {
-    if (imu660rc_init(IMU660RC_QUARTERNION_120HZ)) return false;
+    if (imu660rc_init(IMU660RC_QUARTERNION_480HZ)) return false;
     *acc_scale  = imu660rc_transition_factor[0];  // LSB/g
     *gyro_scale = imu660rc_transition_factor[1];  // LSB/(deg/s)
     return true;

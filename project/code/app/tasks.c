@@ -14,11 +14,12 @@
  */
 
 #include "zf_common_headfile.h"
+#include <string.h>
 #include "tasks.h"
 #include "hal_tick.h"
 
 #include "hal_imu.h"
-#include "imu_660ra.h"
+#include "imu_660rc.h"
 #include "core/estimator.h"
 #include "hal_servo.h"
 #include "hal_motor.h"
@@ -48,11 +49,16 @@ static bool        g_ready;
 static volatile u32 g_ms;
 static f32         g_ey, g_ex;
 static f32         g_v_cmd;
+static f32         g_gyro_yaw;             // 纯陀螺积分航向 [rad]
 //===================================================文件级状态===================================================
 
-//===================================================手动模式开关===================================================
-static bool g_manual = true;
-//===================================================手动模式开关===================================================
+//===================================================自动模式===================================================
+static bool g_manual = false;                // false=自动NN模式, true=手动接收飞控指令
+#define MAX_ROUNDS  10                       // 自动模式跑N圈
+static u32 g_round = 0;                      // 当前圈数
+static Waypoint g_wp_original[MAX_WAYPOINTS]; // 原始航点 (用于每圈重置)
+static u32  g_wp_count = 0;                  // 原始航点数
+//===================================================自动模式===================================================
 
 //===================================================航点===================================================
 #define CAR_START_X  0.0f
@@ -71,6 +77,7 @@ static void actuators_apply(const ActuatorCmd *cmd);
 
 static void task_20hz_planner(void);
 static void task_10hz_debug(void);
+static void task_5hz_state(void);
 static void task_1hz_heartbeat(void);
 //===================================================层入口声明===================================================
 
@@ -132,7 +139,7 @@ void tasks_init(void) {
     hal_led_init();
     longitudinal_init();
     car_comm_init();
-    g_imu = hal_imu_create(&imu_660ra_driver);
+    g_imu = hal_imu_create(&imu_660rc_driver);
     if (!g_imu) { while(1); }
 
     u32  wp_count = sizeof(g_targets) / sizeof(g_targets[0]);
@@ -146,6 +153,10 @@ void tasks_init(void) {
     }
 
     waypoint_mgr_init(&g_wp_mgr, wp_ordered, wp_count);
+
+    /* 保存原始航点, 供自动模式每圈重置 */
+    memcpy(g_wp_original, wp_ordered, wp_count * sizeof(Waypoint));
+    g_wp_count = wp_count;
 
     g_vst = g_car;
     g_vst_prev = g_car;
@@ -177,6 +188,8 @@ void car_control_update(void) {
 
     car_estimate_update(&g_car, &g_imu_data, &g_enc, &g_cmd);
 
+    g_gyro_yaw += g_imu_data.gyro[2] * ISR_DT;  /* 纯陀螺积分, 1kHz */
+
     if (g_ms < STARTUP_DELAY_MS) return;
 
     if (div_trk == 0) {
@@ -189,17 +202,67 @@ void car_control_update(void) {
 //===================================================主循环任务===================================================
 
 static void task_20hz_planner(void) {
-    car_comm_rx_t rx = car_comm_get();
-    g_plan.a     = clamp(rx.a * 0.01f, -A_MANUAL_MAX, A_MANUAL_MAX);
-    g_plan.omega = clamp(rx.omega, -OMEGA_DELTA_MAX, OMEGA_DELTA_MAX);
+    /* ── 手动模式: 接收飞控指令 ── */
+    if (g_manual) {
+        car_comm_rx_t rx = car_comm_get();
+        g_plan.a     = clamp(rx.a * 0.01f, -A_MANUAL_MAX, A_MANUAL_MAX);
+        g_plan.omega = clamp(rx.omega, -OMEGA_DELTA_MAX, OMEGA_DELTA_MAX);
+        return;
+    }
+
+    /* ── 自动模式: NN规划, 跑 MAX_ROUNDS 圈后回到原点停车 ── */
+    if (g_round >= MAX_ROUNDS) {
+        g_plan.a     = -2.0f;   /* 减速停车, 约1s从 V_MAX→0 */
+        g_plan.omega = 0.0f;
+        return;
+    }
+
+    /* ① 到达检测 */
+    if (waypoint_mgr_check_hit(&g_wp_mgr, &g_vst_prev, &g_vst)) {
+        waypoint_mgr_mark_reached(&g_wp_mgr);
+    }
+
+    /* ② 获取窗口 + NN前向 */
+    Waypoint g1, g2, g3;
+    if (waypoint_mgr_get_window(&g_wp_mgr, &g1, &g2, &g3)) {
+        planner_forward(&g_plan, &g_vst, &g1, &g2, &g3);
+    } else {
+        /* 所有航点已到达 → 本圈完成 */
+        g_round++;
+        if (g_round < MAX_ROUNDS) {
+            waypoint_mgr_init(&g_wp_mgr, g_wp_original, g_wp_count);
+            /* 新圈第一帧立即规划 */
+            if (waypoint_mgr_get_window(&g_wp_mgr, &g1, &g2, &g3)) {
+                planner_forward(&g_plan, &g_vst, &g1, &g2, &g3);
+            }
+        } else {
+            /* MAX_ROUNDS 圈跑完, 减速停车 */
+            g_plan.a     = -2.0f;
+            g_plan.omega = 0.0f;
+        }
+    }
+
+    /* ③ 记录本周期起点, 供下次到达检测使用 */
+    g_vst_prev = g_vst;
 }
 
 static void task_10hz_debug(void) {
-    car_comm_rx_t rx = car_comm_get();
-    printf("RX seq=%lu a=%.2f w=%.2f | PLAN a=%.2f w=%.2f\r\n",
-           (unsigned long)rx.seq,
-           (double)(rx.a * 0.01f), (double)rx.omega,
-           (double)g_plan.a, (double)g_plan.omega);
+    /* 暂时关闭 */
+}
+
+static void task_5hz_state(void) {
+    f32 yq = 0.0f;
+    if (g_imu_data.has_quat) {
+        f32 *q = g_imu_data.quat;
+        yq = atan2f(2.0f*(q[0]*q[1] + q[2]*q[3]),
+                    1.0f - 2.0f*(q[0]*q[0] + q[2]*q[2]));
+        yq = wrap_pi(M_PI_F - yq) * 57.29578f;  /* 180°偏移 + 符号翻转, rad→deg */
+    }
+    printf("%.3f,%.3f,%.1f,%.1f,%.1f\r\n",
+           (double)g_car.x, (double)g_car.y,
+           (double)(g_car.theta * 57.29578f),
+           (double)yq,
+           (double)(g_gyro_yaw * 57.29578f));
 }
 
 static void task_1hz_heartbeat(void) {
@@ -210,5 +273,6 @@ static void task_1hz_heartbeat(void) {
 Task tasks[TASK_NUM] = {
     {task_20hz_planner,    50,  1, 0},
     {task_10hz_debug,     100,  1, 0},
+    {task_5hz_state,      200,  1, 0},
     {task_1hz_heartbeat, 1000,  1, 0},
 };
