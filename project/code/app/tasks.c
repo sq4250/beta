@@ -1,15 +1,17 @@
 /**
- * tasks.c — 四层架构胶水
+ * tasks.c — 四模式车端控制
  *
- * ┌─────────────────────────────────────────────────────────┐
- * │ 状态观测 (1kHz ISR)  IMU偏航 + 编码器ZOH → v,x,y,θ,δ   │
- * │ 航点层 (20Hz main)  到达检测 + 3 窗口获取              │
- * │ 规划层 (20Hz main)  车体变换 + NN → ZOH 动作           │
- * │ 跟踪层 (200Hz ISR)  推进 VST, 时间同步 LQR+LADRC       │
- * │ 执行层 (200Hz ISR)  舵机 PWM + 电机 PWM                │
- * └─────────────────────────────────────────────────────────┘
+ * ┌──────────┬──────────┬────────────────────────────────┐
+ * │ 模式      │ 航点来源   │ 启动方式                       │
+ * ├──────────┼──────────┼────────────────────────────────┤
+ * │ 1 DIRECT    │ 无        │ CMD 0x10 收到即执行             │
+ * │ 2 FULL_AUTO │ 本地 TSP  │ 上电自跑                       │
+ * │ 3 REMOTE_WP │ CMD 0x30  │ CMD 0x31                      │
+ * │ 4 AUTO_START│ 本地 TSP  │ CMD 0x31 (飞机"开始跟踪"按钮)   │
+ * └──────────┴──────────┴────────────────────────────────┘
  *
- * 手动模式 (g_manual): 飞控世界速度 vn/vw [cm/s] → 机体前向投影 → P控制, ω≡0
+ * 共享: wp_queue(SPSC环形缓冲) → 到达滑窗 → NN → g_plan
+ *       跟踪层(200Hz ISR): LQR横向 + LADRC纵向 → 舵机+电机
  */
 
 #include "zf_common_headfile.h"
@@ -27,98 +29,113 @@
 #include "core/planner.h"
 #include "core/lateral.h"
 #include "core/longitudinal.h"
-#include "core/waypoint_mgr.h"
 #include "core/kinematics.h"
+#if CAR_MODE == 2 || CAR_MODE == 4
 #include "core/tsp.h"
+#endif
 #include "car_comm.h"
 #include "hal_led.h"
 #include "utils.h"
 
-//===================================================文件级状态===================================================
-static CarState    g_car;
-static CarState    g_vst;
-static ImuData     g_imu_data;
-static ActuatorCmd g_cmd;
-static CarState    g_vst_prev;      // 上周期虚拟车起点 (航点线段检测, 复用 CarState)
-static PlannerAction g_plan;         // 动作 ZOH (20Hz 更新)
-static Encoder     g_enc;            // 编码器读数
-static WaypointMgr g_wp_mgr;        // 航点管理 (调用方持有)
-static Waypoint     g_wp_original[MAX_WAYPOINTS]; // 原始航点副本 (无限循环重置用)
-static u32          g_wp_count;                    // 原始航点数
-static ImuHandle   g_imu;
-static bool        g_ready;
-static volatile u32 g_ms;          // ISR tick 计数器 (1ms)
-static f32         g_ey, g_ex;     // 车体坐标系跟踪误差 (ISR 写入, debug 读取)
-static f32         g_v_cmd;        // 飞控指令速度缓存 [m/s]
-//===================================================文件级状态===================================================
+/* ═══════════════════════════════════════════════════════════
+ *  wp_queue — SPSC 环形缓冲 (ISR/init 生产, planner 消费)
+ * ═══════════════════════════════════════════════════════════ */
+#define WP_MASK  (WP_QUEUE_SIZE - 1)
 
-//===================================================手动模式开关===================================================
-static bool g_manual = false;  /* true=飞控ax直驱, false=NN自动驾驶 */
-#define MAX_ROUNDS  10         /* 自动模式绕圈上限 */
-static u32 g_round = 0;        /* 当前圈数 (0-based) */
-//===================================================手动模式开关===================================================
+static Waypoint    g_wp_queue[WP_QUEUE_SIZE];
+static volatile u8 g_wp_head;   /* 生产者写入索引 */
+static u8          g_wp_tail;   /* 消费者读取索引 */
 
-//===================================================航点===================================================
-/* ── 小车世界初始位置 (TSP 起点) ── */
-#define CAR_START_X  0.0f
-#define CAR_START_Y  0.0f
+static u8  wp_count(void)         { return (g_wp_head - g_wp_tail) & WP_MASK; }
+static void wp_push(const Waypoint *wp) { g_wp_queue[g_wp_head] = *wp; g_wp_head = (g_wp_head + 1) & WP_MASK; }
+static void wp_push_n(const Waypoint *wps, u8 n) { for (u8 i = 0; i < n; i++) wp_push(&wps[i]); }
+static Waypoint wp_peek(u8 off)   { return g_wp_queue[(g_wp_tail + off) & WP_MASK]; }
+static void wp_pop(void)          { g_wp_tail = (g_wp_tail + 1) & WP_MASK; }
+static void wp_clear(void)        { g_wp_head = g_wp_tail = 0; }
 
-/* ── 待访问目标点集 (无序, TSP 排序后 → waypoint_mgr) ── */
-static const Waypoint g_targets[] = {
-    {1.21f, 0.50f}, {3.80f, 1.17f}, {2.63f, -2.0f}, {4.28f, -2.28f},{4.53f, -0.35f},
+/* ═══════════════════════════════════════════════════════════
+ *  文件级状态
+ * ═══════════════════════════════════════════════════════════ */
+static CarState      g_car;        /* 真实车状态 (估计器输出) */
+static CarState      g_vst;        /* 虚拟车状态 (NN 跟踪参考) */
+static ImuData       g_imu_data;
+static ActuatorCmd   g_cmd;
+static PlannerAction g_plan;       /* NN 输出 / 直驱动作, ZOH 到跟踪层 */
+static Encoder       g_enc;
+static ImuHandle     g_imu;
+static bool          g_ready;
+static volatile u32  g_ms;
+static f32           g_ey, g_ex;   /* 跟踪误差, ISR 写入 / debug 读取 */
+static bool          g_wp_active;  /* 航点执行进行中 */
+
+/* ── 本地航点 (MODE 2/4 用) ── */
+#if CAR_MODE == 2 || CAR_MODE == 4
+static const Waypoint g_local_targets[LOCAL_WP_COUNT] = {
+    {1.21f, 0.50f}, {3.80f, 1.17f}, {2.63f, -2.0f}, {4.28f, -2.28f}, {4.53f, -0.35f},
 };
-//===================================================航点===================================================
+#endif
 
-//===================================================层入口声明===================================================
+/* ── 飞机数据消重 seq ── */
+#if CAR_MODE == 1
+static u32 s_last_a_seq;
+#endif
+#if CAR_MODE == 3
+static u32 s_last_wp_seq;
+static u32 s_last_start_seq;
+static u32 s_last_stop_seq;
+#endif
+#if CAR_MODE == 4
+static u32 s_last_start_seq;
+static u32 s_last_stop_seq;
+#endif
+
+/* ═══════════════════════════════════════════════════════════
+ *  前向声明
+ * ═══════════════════════════════════════════════════════════ */
 static void imu_read(ImuData *d, const ImuHandle imu);
 static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst, const CarState *car,
-                                 const PlannerAction *plan, f32 gyro_z);
+                                const PlannerAction *plan, f32 gyro_z);
 static void actuators_apply(const ActuatorCmd *cmd);
-
 static void task_20hz_planner(void);
 static void task_10hz_debug(void);
 static void task_1hz_heartbeat(void);
-//===================================================层入口声明===================================================
 
-//===================================================IMU 观测 (1kHz)===================================================
-
+/* ═══════════════════════════════════════════════════════════
+ *  IMU 观测 (1kHz ISR)
+ * ═══════════════════════════════════════════════════════════ */
 static void imu_read(ImuData *d, const ImuHandle imu) {
     hal_imu_read_all(d->gyro, d->accel, imu);
     d->has_quat = hal_imu_has_quat(imu);
     if (d->has_quat) hal_imu_read_quat(d->quat, imu);
 }
 
-//===================================================误差投影===================================================
-
-// 真实车→虚拟车误差投影到参考系 (e = r - y = vst - rs)
-static void ref_frame_error(f32 *ex, f32 *ey,
-                            const CarState *rs, const CarState *vst
-    ) {
+/* ═══════════════════════════════════════════════════════════
+ *  误差投影: 真实车→虚拟车 (vst 系, e = r - y)
+ * ═══════════════════════════════════════════════════════════ */
+static void ref_frame_error(f32 *ex, f32 *ey, const CarState *rs, const CarState *vst) {
     f32 ct = cosf(vst->theta), st = sinf(vst->theta);
     *ex = (vst->x - rs->x) * ct + (vst->y - rs->y) * st;
     *ey = (rs->x - vst->x) * st - (rs->y - vst->y) * ct;
 }
 
-//===================================================跟踪层 (200Hz, 时间同步)===================================================
-
+/* ═══════════════════════════════════════════════════════════
+ *  跟踪层 (200Hz ISR): 虚拟车推进 + LQR + LADRC → 执行器
+ * ═══════════════════════════════════════════════════════════ */
 static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst,
                                 const CarState *car,
-                                const PlannerAction *plan, f32 gyro_z
-    ) {
+                                const PlannerAction *plan, f32 gyro_z) {
     mcu_kinematics_step(vst, plan->a, plan->omega);
 
     f32 e_x, e_y;
     ref_frame_error(&e_x, &e_y, car, vst);
-    g_ex = e_x; g_ey = e_y;  // ISR 写入, debug 任务读取
+    g_ex = e_x; g_ey = e_y;
 
     f32 omega_cmd = lateral_step(car, vst, plan->omega, gyro_z, e_y);
     cmd->servo_delta = clamp(car->delta + omega_cmd * CTRL_DT, -DELTA_MAX, DELTA_MAX);
 
     f32 a_ref = plan->a;
-    if (vst->v >= V_MAX && a_ref > 0.0f)
-        a_ref = 0.0f;
-    if (vst->v <= 0.0f && a_ref < 0.0f)
-        a_ref = 0.0f;
+    if (vst->v >= V_MAX && a_ref > 0.0f) a_ref = 0.0f;
+    if (vst->v <= 0.0f && a_ref < 0.0f) a_ref = 0.0f;
 
     f32 thr_l, thr_r;
     longitudinal_step(&thr_l, &thr_r, car->v, vst->v, a_ref, e_x, car->delta);
@@ -126,17 +143,55 @@ static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst,
     cmd->motor_r = thr_r;
 }
 
-//===================================================执行层 (200Hz)===================================================
-
 static void actuators_apply(const ActuatorCmd *cmd) {
     hal_servo_set_delta(cmd->servo_delta);
     hal_motor_set_thr(cmd->motor_l, cmd->motor_r);
 }
 
-//===================================================初始化===================================================
+/* ═══════════════════════════════════════════════════════════
+ *  wp_planner_step — NN 规划 + 到达滑窗 (MODE 2/3/4 共用)
+ *
+ *  队列头部为当前目标. 真实车距目标 < TOL_XY → 弹出 → 滑窗.
+ *  取前 3 个航点送入 NN, 不足则重复末点.
+ *  队列耗尽 → 刹车. MODE 2 停车, MODE 3/4 保持 active 等新数据.
+ * ═══════════════════════════════════════════════════════════ */
+#if CAR_MODE >= 2
+static void wp_planner_step(void) {
+    u8 cnt = wp_count();
+    if (cnt == 0) {
+        g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f;
+#if CAR_MODE == 2
+        g_wp_active = false;   /* FULL_AUTO: 跑完即停 */
+#endif
+        return;                /* REMOTE_WP / AUTO_START: 等新数据 */
+    }
 
+    Waypoint cur = wp_peek(0);
+    f32 dx = g_car.x - cur.x, dy = g_car.y - cur.y;
+    if (sqrtf(dx * dx + dy * dy) < TOL_XY) {
+        wp_pop();
+        cnt = wp_count();
+        if (cnt == 0) {
+            g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f;
+#if CAR_MODE == 2
+            g_wp_active = false;
+#endif
+            return;
+        }
+    }
+
+    Waypoint g1 = wp_peek(0);
+    Waypoint g2 = cnt > 1 ? wp_peek(1) : g1;
+    Waypoint g3 = cnt > 2 ? wp_peek(2) : g2;
+    planner_forward(&g_plan, &g_vst, &g1, &g2, &g3);
+}
+#endif
+
+/* ═══════════════════════════════════════════════════════════
+ *  init — 加载本地航点 (MODE 2/4), 推入队列
+ * ═══════════════════════════════════════════════════════════ */
 void tasks_init(void) {
-    gpio_init(P23_7, GPO, 1, GPO_PUSH_PULL);  // LED (低电平亮)
+    gpio_init(P23_7, GPO, 1, GPO_PUSH_PULL);
     hal_servo_init();
     hal_motor_init();
     hal_encoder_init();
@@ -144,174 +199,182 @@ void tasks_init(void) {
     longitudinal_init();
     car_comm_init();
     g_imu = hal_imu_create(&imu_660rc_driver);
-    if (!g_imu) { while(1); }  // IMU 初始化失败 → 终止, 避免盲开
+    if (!g_imu) { while (1); }
 
-    /* TSP 排序: 从小车初始位置出发, 最近邻贪心确定访问顺序 */
-    u32  wp_count = sizeof(g_targets) / sizeof(g_targets[0]);
-    Waypoint wp_ordered[MAX_WAYPOINTS];
-    tsp_solve(wp_ordered, g_targets, wp_count, CAR_START_X, CAR_START_Y);
+    wp_clear();
+    g_wp_active = false;
+    g_plan.a = 0.0f; g_plan.omega = 0.0f;
 
-    /* 末尾追加原点: 遍历完所有目标后回到起点 */
-    if (wp_count < MAX_WAYPOINTS) {
-        wp_ordered[wp_count].x = CAR_START_X;
-        wp_ordered[wp_count].y = CAR_START_Y;
-        wp_count++;
+    /* MODE 2/4: TSP 排序本地航点 → 推入队列 → 末尾追加起点 */
+#if CAR_MODE == 2 || CAR_MODE == 4
+    {
+        Waypoint ordered[MAX_WAYPOINTS];
+        tsp_solve(ordered, g_local_targets, LOCAL_WP_COUNT, CAR_START_X, CAR_START_Y);
+        wp_push_n(ordered, LOCAL_WP_COUNT);
+        Waypoint home = {CAR_START_X, CAR_START_Y};
+        wp_push(&home);
     }
+#endif
 
-    waypoint_mgr_init(&g_wp_mgr, wp_ordered, wp_count);
-    memcpy(g_wp_original, wp_ordered, wp_count * sizeof(Waypoint));
-    g_wp_count = wp_count;
-
+    /* MODE 2: 上电自跑. MODE 1/3/4: 等外部指令 */
+#if CAR_MODE == 2
+    g_wp_active = true;
     g_vst = g_car;
-    g_vst_prev = g_car;
+#endif
 
-    if (!g_manual) {
-        Waypoint g1, g2, g3;
-        if (waypoint_mgr_get_window(&g_wp_mgr, &g1, &g2, &g3)) {
-            planner_forward(&g_plan, &g_vst, &g1, &g2, &g3);
-        }
-    }
-
-    hal_encoder_get(&g_enc);  // 清零标定期间累积, 确保消费者从首次 ISR 拿到的窗口 ≤1ms
+    hal_encoder_get(&g_enc);
     g_ready = true;
 }
 
-//===================================================ISR 控制===================================================
-
+/* ═══════════════════════════════════════════════════════════
+ *  ISR 入口 (1kHz)
+ * ═══════════════════════════════════════════════════════════ */
 void car_control_update(void) {
     if (!g_ready) return;
     g_ms++;
 
-    // ── 1kHz: IMU 采样 ──
     imu_read(&g_imu_data, g_imu);
 
-    // ── 编码器: TRACKER_FREQ 读取, 其他 tick 保持 ──
     static u8 div_trk = 0;
-    if (++div_trk >= TRACKER_DIV) {
-        div_trk = 0;
-        hal_encoder_get(&g_enc);
-    }
+    if (++div_trk >= TRACKER_DIV) { div_trk = 0; hal_encoder_get(&g_enc); }
 
-    // ── 1kHz: 状态估计 (测量 + 上周期控制量 → 5状态) ──
     car_estimate_update(&g_car, &g_imu_data, &g_enc, &g_cmd);
 
-    // ── 启动延迟: 等待 IMU 零偏稳定, 不执行控制 ──
     if (g_ms < STARTUP_DELAY_MS) return;
 
-    // ── TRACKER_FREQ: 跟踪层 + 执行层 ──
     if (div_trk == 0) {
-        tracking_layer_step(&g_cmd, &g_vst, &g_car, &g_plan,
-                            g_imu_data.gyro[2]);
+        tracking_layer_step(&g_cmd, &g_vst, &g_car, &g_plan, g_imu_data.gyro[2]);
         actuators_apply(&g_cmd);
     }
 }
 
-//===================================================主循环任务===================================================
-
+/* ═══════════════════════════════════════════════════════════
+ *  规划任务 (20Hz main)
+ * ═══════════════════════════════════════════════════════════ */
 static void task_20hz_planner(void) {
-    if (g_manual) {
-        /* 手动模式: 飞控世界速度 vn/vw [cm/s] → 机体前向速度 → P控制, ω≡0 */
-        static u32 s_last_seq = 0;
-        static u32 s_stale    = 0;
-        car_comm_rx_t rx = car_comm_get();
-        if (rx.seq != s_last_seq) {
-            s_last_seq = rx.seq;
-            s_stale    = 0;
-        }
-        /* 世界 NWU → 机体前向投影, cm/s → m/s */
+    car_comm_rx_t rx = car_comm_get();
+
+/* ── MODE 1 DIRECT: CMD 0x10 世界加速度 → 机体投影 → 直驱 ── */
+#if CAR_MODE == 1
+    {
+        static u32 s_stale;
+        if (rx.a_seq != s_last_a_seq) { s_last_a_seq = rx.a_seq; s_stale = 0; }
+        if (++s_stale >= 10) { rx.a_n = 0.0f; rx.a_w = 0.0f; }
+
         f32 ct = cosf(g_car.theta), st = sinf(g_car.theta);
-        f32 v_des = (rx.vn * ct + rx.vw * st) * 0.01f;  /* cm/s → m/s */
-        if (++s_stale >= 10) v_des = 0.0f;               /* 500ms 超时 → 停车 */
-        g_v_cmd    = v_des;
-        g_plan.a    = clamp((v_des - g_vst.v) * 20.0f, -A_BRAKE_MAX, A_LONG_MAX);
+        g_plan.a     = clamp(rx.a_n * ct + rx.a_w * st, -A_BRAKE_MAX, A_LONG_MAX);
         g_plan.omega = 0.0f;
-        return;
     }
 
-    /* ── 圈数达上限 → 刹车停车 ── */
-    if (g_round >= MAX_ROUNDS) {
+/* ── MODE 2 FULL_AUTO: 上电自跑, 跑完停车 ── */
+#elif CAR_MODE == 2
+    if (!g_wp_active) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f; return; }
+    wp_planner_step();
+
+/* ── MODE 3 REMOTE_WP: CMD 0x30 收航点 + CMD 0x31 启动 + CMD 0x32 停止复位 ── */
+#elif CAR_MODE == 3
+    if (rx.stop_seq != s_last_stop_seq) {
+        s_last_stop_seq = rx.stop_seq;
+        wp_clear();
+        g_wp_active = false;
+        g_vst = g_car;
         g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f;
-        return;
     }
-
-    if (waypoint_mgr_check_hit(&g_wp_mgr, &g_vst_prev, &g_vst)) {
-        waypoint_mgr_mark_reached(&g_wp_mgr);
-    }
-    Waypoint g1, g2, g3;
-    if (waypoint_mgr_get_window(&g_wp_mgr, &g1, &g2, &g3)) {
-        planner_forward(&g_plan, &g_vst, &g1, &g2, &g3);
-    } else {
-        /* 本圈航点全部到达 → 下一圈或停车 */
-        g_round++;
-        if (g_round < MAX_ROUNDS) {
-            waypoint_mgr_init(&g_wp_mgr, g_wp_original, g_wp_count);
-            if (waypoint_mgr_get_window(&g_wp_mgr, &g1, &g2, &g3)) {
-                planner_forward(&g_plan, &g_vst, &g1, &g2, &g3);
-            }
-        } else {
-            g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f;
+    if (rx.wp_seq != s_last_wp_seq) {
+        s_last_wp_seq = rx.wp_seq;
+        wp_clear();
+        /* 飞机发 cm, 车用 m: 转换 */
+        Waypoint wp_m[REMOTE_WP_COUNT];
+        for (u8 i = 0; i < REMOTE_WP_COUNT; i++) {
+            wp_m[i].x = rx.wp[i].x * 0.01f;
+            wp_m[i].y = rx.wp[i].y * 0.01f;
         }
+        wp_push_n(wp_m, REMOTE_WP_COUNT);
     }
-    g_vst_prev = g_vst;
+    if (rx.start_seq != s_last_start_seq) {
+        s_last_start_seq = rx.start_seq;
+        g_wp_active = true;
+        g_vst = g_car;
+    }
+    if (!g_wp_active) return;
+    wp_planner_step();
+
+/* ── MODE 4 AUTO_START: 本地航点 + CMD 0x31 启动 + CMD 0x32 停止复位 ── */
+#elif CAR_MODE == 4
+    if (rx.stop_seq != s_last_stop_seq) {
+        s_last_stop_seq = rx.stop_seq;
+        /* 复位: 清队列 → 重载本地航点 → 停车 → 等下次启动 */
+        wp_clear();
+        Waypoint ordered[MAX_WAYPOINTS];
+        tsp_solve(ordered, g_local_targets, LOCAL_WP_COUNT, CAR_START_X, CAR_START_Y);
+        wp_push_n(ordered, LOCAL_WP_COUNT);
+        Waypoint home = {CAR_START_X, CAR_START_Y};
+        wp_push(&home);
+        g_wp_active = false;
+        g_vst = g_car;
+        g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f;
+    }
+    if (rx.start_seq != s_last_start_seq) {
+        s_last_start_seq = rx.start_seq;
+        g_wp_active = true;
+        g_vst = g_car;
+    }
+    if (!g_wp_active) return;
+    wp_planner_step();
+#endif
 }
 
-static void task_10hz_debug(void) {
-    // ── 航点最小距离追踪 (idx切换时激活, 到达后继续追踪直到报告) ──
-    static u32  wp_last_reached = 0;
-    static f32  wp_min_d[MAX_WAYPOINTS];
-    static u32  wp_active = 0;  // bitmask: 哪些航点正在被追踪
-    u32 ci = g_wp_mgr.idx;
-    if (ci < g_wp_mgr.count && !(wp_active & (1u << ci))) {
-        wp_min_d[ci] = 1e9f;
-        wp_active |= (1u << ci);
-    }
-    for (u32 i = 0; i < g_wp_mgr.count; ++i) {
-        if (!(wp_active & (1u << i))) continue;
-        f32 dx = g_car.x - g_wp_mgr.wps[i].x;
-        f32 dy = g_car.y - g_wp_mgr.wps[i].y;
-        f32 d  = sqrtf(dx*dx + dy*dy);
-        if (d < wp_min_d[i]) wp_min_d[i] = d;
-    }
-    u32 reached_now = waypoint_mgr_reached_count(&g_wp_mgr);
-    while (wp_last_reached < reached_now) {
-        u32 i = wp_last_reached;
-        printf("#WP%u min_d=%.4fm\n", i, (double)wp_min_d[i]);
-        wp_active &= ~(1u << i);
-        wp_last_reached++;
-    }
+/* ═══════════════════════════════════════════════════════════
+ *  上报任务 (20Hz main) — 网络跑完立刻发
+ *
+ *  体轴加速度 → 世界 NWU:
+ *    a_fwd = g_plan.a           (纵向, body前)
+ *    a_lat = g_car.v * g_plan.omega  (横向, body左, 向心加速度)
+ *    a_n   = a_fwd·cosθ − a_lat·sinθ
+ *    a_w   = a_fwd·sinθ + a_lat·cosθ
+ * ═══════════════════════════════════════════════════════════ */
+static void task_20hz_report(void) {
+    f32 ct = cosf(g_car.theta), st = sinf(g_car.theta);
+    f32 a_fwd = g_plan.a;
+    f32 a_lat = g_car.v * g_plan.omega;
+    f32 a_n   = a_fwd * ct - a_lat * st;
+    f32 a_w   = a_fwd * st + a_lat * ct;
 
-    // ── 常规状态输出 ──
+    car_comm_send(a_n, a_w, g_car.x * 100.0f, g_car.y * 100.0f);
+}
+
+/* ═══════════════════════════════════════════════════════════
+ *  调试 (10Hz main)
+ * ═══════════════════════════════════════════════════════════ */
+static void task_10hz_debug(void) {
     static bool hdr = true;
     if (hdr) {
-        printf("#bias=%.4fdeg/s\r\n", (double)(hal_imu_gyro_bias_z(g_imu) * 57.29578f));
-        if (g_manual)
-            printf("t[s],x[m],y[m],th[rad],v[m/s],v_cmd[m/s],delta[rad]\r\n");
-        else
-            printf("t[s],x[m],y[m],th[rad],v[m/s],ey[m],ex[m],delta[rad],vst_x[m],vst_y[m],vst_th[rad],plan_a,plan_w\r\n");
+        printf("#bias=%.4fdeg/s  mode=%u  q=%u\r\n",
+               (double)(hal_imu_gyro_bias_z(g_imu) * 57.29578f),
+               (u32)CAR_MODE, wp_count());
+        /*        t      x     y     th     v     ey    ex    pa    pw    delta  an    aw  */
+        printf("t[s],x[m],y[m],th[deg],v[m/s],ey[m],ex[m],pa[m/s2],pw[rad/s],delta[rad],an[m/s2],aw[m/s2]\r\n");
         hdr = false;
     }
-    if (g_manual)
-        printf("%.3f,%.1f,%.1f,%.4f,%.1f,%.1f,%.4f\r\n",
-            (f32)g_ms * 0.001f,
-            g_car.x, g_car.y, g_car.theta, g_car.v,
-            g_v_cmd, g_car.delta);
-    else
-        printf("%.3f,%.1f,%.1f,%.4f,%.1f,%.4f,%.4f,%.4f,%.1f,%.1f,%.4f,%.3f,%.3f\r\n",
-            (f32)g_ms * 0.001f,
-            g_car.x, g_car.y, g_car.theta, g_car.v,
-            g_ey, g_ex, g_car.delta,
-            g_vst.x, g_vst.y, g_vst.theta,
-            (double)g_plan.a, (double)g_plan.omega);
-    car_comm_send(g_car.x * 100.0f, g_car.y * 100.0f);  /* m → cm */
+    f32 ct = cosf(g_car.theta), st = sinf(g_car.theta);
+    f32 a_lat = g_car.v * g_plan.omega;
+    f32 a_n = g_plan.a * ct - a_lat * st;
+    f32 a_w = g_plan.a * st + a_lat * ct;
+    printf("%.3f,%.1f,%.1f,%.1f,%.1f,%.4f,%.4f,%.3f,%.3f,%.4f,%.3f,%.3f\r\n",
+           (f32)g_ms * 0.001f,
+           g_car.x, g_car.y, g_car.theta * 57.29578f, g_car.v,
+           g_ey, g_ex,
+           (double)g_plan.a, (double)g_plan.omega, g_car.delta,
+           (double)a_n, (double)a_w);
 }
 
 static void task_1hz_heartbeat(void) {
-    gpio_toggle_level(P23_7);  // LED 闪烁 (0.5Hz), 证明调度器存活
+    gpio_toggle_level(P23_7);
 }
 
-//===================================================任务表===================================================
 Task tasks[TASK_NUM] = {
     {task_20hz_planner,   50,   1, 0},
+    {task_20hz_report,    50,   1, 0},   /* planner 之后立刻上报 */
     {task_10hz_debug,    100,   1, 0},
     {task_1hz_heartbeat, 1000,  1, 0},
 };
