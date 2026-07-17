@@ -71,7 +71,8 @@ static bool          g_wp_active;  /* 航点执行进行中 */
 /* ── 本地航点 (MODE 2/4 用) ── */
 #if CAR_MODE == 2 || CAR_MODE == 4
 static const Waypoint g_local_targets[LOCAL_WP_COUNT] = {
-    {1.21f, 0.50f}, {3.80f, 1.17f}, {2.63f, -2.0f}, {4.28f, -2.28f}, {4.53f, -0.35f},
+    // {1.21f, 0.50f}, {3.80f, 1.17f}, {2.63f, -2.0f}, {4.28f, -2.28f}, {4.53f, -0.35f},
+    {1.09f, 0.115f}, {3.675f, 0.785f}, {4.40f, -0.755f}, {4.17f, -2.73f}, {2.50f, -2.395f},
 };
 #endif
 

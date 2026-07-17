@@ -6,7 +6,20 @@
 #define CONFIG_H
 
 #include "common.h"
-#include "core/nn_model.h"
+
+/* ── 切模型: 改 NN_MODEL_VERSION ── */
+#define NN_VER_1P5         15
+#define NN_VER_20          20
+#define NN_VER_30          30
+#define NN_MODEL_VERSION   NN_VER_1P5   /* ← 改这里 */
+
+#if   NN_MODEL_VERSION == NN_VER_1P5
+  #include "core/nn_model_v1p5.h"
+#elif NN_MODEL_VERSION == NN_VER_20
+  #include "core/nn_model_v20.h"
+#elif NN_MODEL_VERSION == NN_VER_30
+  #include "core/nn_model_v30.h"
+#endif
 
 //===================================================车体几何===================================================
 #define WHEELBASE         0.15f       // 轴距 L [m]
@@ -46,14 +59,14 @@
 //===================================================控制器频率===================================================
 
 //===================================================航点===================================================
-#define TOL_XY             0.20f      // 到达容差 [m]
+#define TOL_XY             0.15f      // 到达容差 [m]
 #define MAX_WAYPOINTS      16         // 最大航点数
 
 /* ── 航点队列 ── */
 #define WP_QUEUE_SIZE      16         // 环形缓冲槽数 (须为 2 的幂)
 
 /* ── 模式: 1=DIRECT  2=FULL_AUTO  3=REMOTE_WP  4=AUTO_START ── */
-#define CAR_MODE           3          // ← 改这里切模式
+#define CAR_MODE           2          // ← 改这里切模式
 /*
  * 1 DIRECT     飞机 CMD 0x10 直驱加速度, 不跑 NN
  * 2 FULL_AUTO  本地航点 TSP 排序 → wp_queue → 上电自跑
@@ -81,9 +94,8 @@
 //===================================================纵向 LADRC===================================================
 
 //===================================================4-clamp===================================================
-/* A_LONG_MAX / A_BRAKE_MAX 已移至 nn_model.h, 此处保留 OMEGA_DELTA_MAX (舵机物理约束) */
+/* A_LONG_MAX / A_BRAKE_MAX / V_MAX 已移至各模型头文件 */
 #define OMEGA_DELTA_MAX    20.0f      // 前轮转角角速度上限 [rad/s]
-#define V_MAX               4.0f      // 速度上限 [m/s]
 #define DELTA_MAX           0.4636f   // 前轮转角上限 [rad] (≈26.5°)
 //===================================================4-clamp===================================================
 

@@ -2213,7 +2213,13 @@
             <name>$PROJ_DIR$\..\..\code\core\longitudinal.c</name>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\..\code\core\nn_model.c</name>
+            <name>$PROJ_DIR$\..\..\code\core\nn_model_v1p5.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\core\nn_model_v20.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\core\nn_model_v30.c</name>
         </file>
         <file>
             <name>$PROJ_DIR$\..\..\code\core\planner.c</name>

@@ -2,7 +2,6 @@
  * planner.c — 规划层实现: 纯 NN 推理
  */
 #include "planner.h"
-#include "nn_model.h"
 #include "kinematics.h"
 
 void planner_forward(PlannerAction *act,
