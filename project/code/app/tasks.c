@@ -161,11 +161,13 @@ static void wp_planner_step(void) {
     if (cnt == 0) {
         g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f;
 #if CAR_MODE == 2
-        g_wp_active = false;   /* FULL_AUTO: 跑完即停 */
+        g_wp_active = false;
 #endif
-        return;                /* REMOTE_WP / AUTO_START: 等新数据 */
+        return;
     }
 
+#if CAR_MODE == 2 || CAR_MODE == 4
+    /* MODE 2/4: 车端自主到达检测 + 弹窗 */
     Waypoint cur = wp_peek(0);
     f32 dx = g_car.x - cur.x, dy = g_car.y - cur.y;
     if (sqrtf(dx * dx + dy * dy) < TOL_XY) {
@@ -179,6 +181,8 @@ static void wp_planner_step(void) {
             return;
         }
     }
+#endif
+    /* MODE 3: 不弹窗, 飞机视觉确认到达后才发新窗口覆盖 */
 
     Waypoint g1 = wp_peek(0);
     Waypoint g2 = cnt > 1 ? wp_peek(1) : g1;
