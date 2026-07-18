@@ -160,7 +160,7 @@ static void actuators_apply(const ActuatorCmd *cmd) {
 static void wp_planner_step(void) {
     u8 cnt = wp_count();
     if (cnt == 0) {
-        g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f;
+        g_plan.a = 0.0f; g_plan.omega = 0.0f;
 #if CAR_MODE == 2
         g_wp_active = false;
 #endif
@@ -175,7 +175,7 @@ static void wp_planner_step(void) {
         wp_pop();
         cnt = wp_count();
         if (cnt == 0) {
-            g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f;
+            g_plan.a = 0.0f; g_plan.omega = 0.0f;
 #if CAR_MODE == 2
             g_wp_active = false;
 #endif
@@ -283,7 +283,7 @@ static void task_20hz_planner(void) {
         wp_clear();
         g_wp_active = false;
         g_vst = g_car;
-        g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f;
+        g_plan.a = 0.0f; g_plan.omega = 0.0f;
     }
     if (rx.wp_seq != s_last_wp_seq) {
         s_last_wp_seq = rx.wp_seq;
@@ -317,7 +317,7 @@ static void task_20hz_planner(void) {
         wp_push(&home);
         g_wp_active = false;
         g_vst = g_car;
-        g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f;
+        g_plan.a = 0.0f; g_plan.omega = 0.0f;
     }
     if (rx.start_seq != s_last_start_seq) {
         s_last_start_seq = rx.start_seq;

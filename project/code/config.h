@@ -9,12 +9,15 @@
 
 /* ── 切模型: 改 NN_MODEL_VERSION ── */
 #define NN_VER_1P5         15
+#define NN_VER_2P5         25
 #define NN_VER_20          20
 #define NN_VER_30          30
-#define NN_MODEL_VERSION   NN_VER_1P5   /* ← 改这里 */
+#define NN_MODEL_VERSION   NN_VER_2P5   /* ← 改这里 */
 
 #if   NN_MODEL_VERSION == NN_VER_1P5
   #include "core/nn_model_v1p5.h"
+#elif NN_MODEL_VERSION == NN_VER_2P5
+  #include "core/nn_model_v2p5.h"
 #elif NN_MODEL_VERSION == NN_VER_20
   #include "core/nn_model_v20.h"
 #elif NN_MODEL_VERSION == NN_VER_30
@@ -59,14 +62,14 @@
 //===================================================控制器频率===================================================
 
 //===================================================航点===================================================
-#define TOL_XY             0.15f      // 到达容差 [m]
+#define TOL_XY             0.10f      // 到达容差 [m]
 #define MAX_WAYPOINTS      16         // 最大航点数
 
 /* ── 航点队列 ── */
 #define WP_QUEUE_SIZE      16         // 环形缓冲槽数 (须为 2 的幂)
 
 /* ── 模式: 1=DIRECT  2=FULL_AUTO  3=REMOTE_WP  4=AUTO_START ── */
-#define CAR_MODE           2          // ← 改这里切模式
+#define CAR_MODE           4          // ← 改这里切模式
 /*
  * 1 DIRECT     飞机 CMD 0x10 直驱加速度, 不跑 NN
  * 2 FULL_AUTO  本地航点 TSP 排序 → wp_queue → 上电自跑
