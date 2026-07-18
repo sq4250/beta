@@ -7,7 +7,7 @@
  *   CMD 0x31 START  LEN=0   启动信号
  *
  * 发送 (车→飞机, task 层):
- *   CMD 0x20 STATUS LEN=16  a_n, a_w [m/s²], world_x, world_y [cm] (NWU)
+ *   CMD 0x20 STATUS LEN=20  a_fwd, a_lat [m/s²], world_x, world_y [cm], theta [rad]
  */
 #include "car_comm.h"
 #include "hal_uart.h"
@@ -99,16 +99,17 @@ car_comm_rx_t car_comm_get(void) {
     return out;
 }
 
-/* ── CMD 0x20 STATUS: a_n + a_w + world_x + world_y (NWU) ── */
-void car_comm_send(f32 a_n, f32 a_w, f32 world_x, f32 world_y) {
-    u8 f[21];
-    f[0] = 0xAA; f[1] = 0x55; f[2] = 0x20; f[3] = 16;
-    memcpy(&f[4],  &a_n,     4);
-    memcpy(&f[8],  &a_w,     4);
+/* ── CMD 0x20 STATUS: a_fwd + a_lat + world_x + world_y + theta ── */
+void car_comm_send(f32 a_fwd, f32 a_lat, f32 world_x, f32 world_y, f32 theta) {
+    u8 f[25];  /* 4 + 20 + 1 */
+    f[0] = 0xAA; f[1] = 0x55; f[2] = 0x20; f[3] = 20;
+    memcpy(&f[4],  &a_fwd,    4);
+    memcpy(&f[8],  &a_lat,    4);
     memcpy(&f[12], &world_x,  4);
     memcpy(&f[16], &world_y,  4);
+    memcpy(&f[20], &theta,    4);
     u8 x = 0;
-    for (u8 i = 0; i < 18; i++) x ^= f[2 + i];
-    f[20] = x;
-    hal_uart_send(f, 21);
+    for (u8 i = 0; i < 22; i++) x ^= f[2 + i];
+    f[24] = x;
+    hal_uart_send(f, 25);
 }

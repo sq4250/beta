@@ -67,6 +67,7 @@ static bool          g_ready;
 static volatile u32  g_ms;
 static f32           g_ey, g_ex;   /* 跟踪误差, ISR 写入 / debug 读取 */
 static bool          g_wp_active;  /* 航点执行进行中 */
+static Waypoint       g_vst_prev;   /* 上周期 vst 位置 (线段碰撞检测起点) */
 
 /* ── 本地航点 (MODE 2/4 用) ── */
 #if CAR_MODE == 2 || CAR_MODE == 4
@@ -152,7 +153,7 @@ static void actuators_apply(const ActuatorCmd *cmd) {
 /* ═══════════════════════════════════════════════════════════
  *  wp_planner_step — NN 规划 + 到达滑窗 (MODE 2/3/4 共用)
  *
- *  队列头部为当前目标. 真实车距目标 < TOL_XY → 弹出 → 滑窗.
+ *  队列头部为当前目标. vst 轨迹穿入目标圆 → 弹出 → 滑窗.
  *  取前 3 个航点送入 NN, 不足则重复末点.
  *  队列耗尽 → 刹车. MODE 2 停车, MODE 3/4 保持 active 等新数据.
  * ═══════════════════════════════════════════════════════════ */
@@ -168,10 +169,9 @@ static void wp_planner_step(void) {
     }
 
 #if CAR_MODE == 2 || CAR_MODE == 4
-    /* MODE 2/4: 车端自主到达检测 + 弹窗 */
+    /* MODE 2/4: 车端自主到达检测 + 弹窗 (vst 线段-圆碰撞) */
     Waypoint cur = wp_peek(0);
-    f32 dx = g_car.x - cur.x, dy = g_car.y - cur.y;
-    if (sqrtf(dx * dx + dy * dy) < TOL_XY) {
+    if (check_hit_substep(g_vst_prev.x, g_vst_prev.y, g_vst.x, g_vst.y, cur.x, cur.y, TOL_XY)) {
         wp_pop();
         cnt = wp_count();
         if (cnt == 0) {
@@ -189,6 +189,7 @@ static void wp_planner_step(void) {
     Waypoint g2 = cnt > 1 ? wp_peek(1) : g1;
     Waypoint g3 = cnt > 2 ? wp_peek(2) : g2;
     planner_forward(&g_plan, &g_vst, &g1, &g2, &g3);
+    g_vst_prev = *(Waypoint*)&g_vst;
 }
 #endif
 
@@ -225,6 +226,8 @@ void tasks_init(void) {
 #if CAR_MODE == 2
     g_wp_active = true;
     g_vst = g_car;
+    g_vst_prev = *(Waypoint*)&g_car;
+    lateral_reset();
 #endif
 
     hal_encoder_get(&g_enc);
@@ -283,6 +286,8 @@ static void task_20hz_planner(void) {
         wp_clear();
         g_wp_active = false;
         g_vst = g_car;
+        g_vst_prev = *(Waypoint*)&g_car;
+    lateral_reset();
         g_plan.a = 0.0f; g_plan.omega = 0.0f;
     }
     if (rx.wp_seq != s_last_wp_seq) {
@@ -300,6 +305,8 @@ static void task_20hz_planner(void) {
         s_last_start_seq = rx.start_seq;
         g_wp_active = true;
         g_vst = g_car;
+        g_vst_prev = *(Waypoint*)&g_car;
+    lateral_reset();
     }
     if (!g_wp_active) return;
     wp_planner_step();
@@ -317,12 +324,16 @@ static void task_20hz_planner(void) {
         wp_push(&home);
         g_wp_active = false;
         g_vst = g_car;
+        g_vst_prev = *(Waypoint*)&g_car;
+    lateral_reset();
         g_plan.a = 0.0f; g_plan.omega = 0.0f;
     }
     if (rx.start_seq != s_last_start_seq) {
         s_last_start_seq = rx.start_seq;
         g_wp_active = true;
         g_vst = g_car;
+        g_vst_prev = *(Waypoint*)&g_car;
+    lateral_reset();
     }
     if (!g_wp_active) return;
     wp_planner_step();
@@ -332,20 +343,16 @@ static void task_20hz_planner(void) {
 /* ═══════════════════════════════════════════════════════════
  *  上报任务 (20Hz main) — 网络跑完立刻发
  *
- *  体轴加速度 → 世界 NWU:
- *    a_fwd = g_plan.a           (纵向, body前)
- *    a_lat = g_car.v * g_plan.omega  (横向, body左, 向心加速度)
- *    a_n   = a_fwd·cosθ − a_lat·sinθ
- *    a_w   = a_fwd·sinθ + a_lat·cosθ
+ *  体轴加速度:
+ *    a_fwd = g_plan.a                         (纵向, NN输出)
+ *    a_lat = vst.v² × tan(vst.delta) / L      (横向, 单车模型曲率)
  * ═══════════════════════════════════════════════════════════ */
 static void task_20hz_report(void) {
-    f32 ct = cosf(g_car.theta), st = sinf(g_car.theta);
     f32 a_fwd = g_plan.a;
-    f32 a_lat = g_car.v * g_plan.omega;
-    f32 a_n   = a_fwd * ct - a_lat * st;
-    f32 a_w   = a_fwd * st + a_lat * ct;
+    f32 curvature = tanf(g_vst.delta) * INV_WHEELBASE;
+    f32 a_lat = g_vst.v * g_vst.v * curvature;
 
-    car_comm_send(a_n, a_w, g_car.x * 100.0f, g_car.y * 100.0f);
+    car_comm_send(a_fwd, a_lat, g_car.x * 100.0f, g_car.y * 100.0f, g_car.theta);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -357,20 +364,13 @@ static void task_10hz_debug(void) {
         printf("#bias=%.4fdeg/s  mode=%u  q=%u\r\n",
                (double)(hal_imu_gyro_bias_z(g_imu) * 57.29578f),
                (u32)CAR_MODE, wp_count());
-        /*        t      x     y     th     v     ey    ex    pa    pw    delta  an    aw  */
-        printf("t[s],x[m],y[m],th[deg],v[m/s],ey[m],ex[m],pa[m/s2],pw[rad/s],delta[rad],an[m/s2],aw[m/s2]\r\n");
+        printf("t[s],car_x[m],car_y[m],car_th[deg],vst_x[m],vst_y[m],vst_th[deg]\r\n");
         hdr = false;
     }
-    f32 ct = cosf(g_car.theta), st = sinf(g_car.theta);
-    f32 a_lat = g_car.v * g_plan.omega;
-    f32 a_n = g_plan.a * ct - a_lat * st;
-    f32 a_w = g_plan.a * st + a_lat * ct;
-    printf("%.3f,%.1f,%.1f,%.1f,%.1f,%.4f,%.4f,%.3f,%.3f,%.4f,%.3f,%.3f\r\n",
+    printf("%.3f,%.3f,%.3f,%.1f,%.3f,%.3f,%.1f\r\n",
            (f32)g_ms * 0.001f,
-           g_car.x, g_car.y, g_car.theta * 57.29578f, g_car.v,
-           g_ey, g_ex,
-           (double)g_plan.a, (double)g_plan.omega, g_car.delta,
-           (double)a_n, (double)a_w);
+           (double)g_car.x, (double)g_car.y, (double)(g_car.theta * 57.29578f),
+           (double)g_vst.x, (double)g_vst.y, (double)(g_vst.theta * 57.29578f));
 }
 
 static void task_1hz_heartbeat(void) {

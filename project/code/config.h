@@ -69,7 +69,7 @@
 #define WP_QUEUE_SIZE      16         // 环形缓冲槽数 (须为 2 的幂)
 
 /* ── 模式: 1=DIRECT  2=FULL_AUTO  3=REMOTE_WP  4=AUTO_START ── */
-#define CAR_MODE           4          // ← 改这里切模式
+#define CAR_MODE           2          // ← 改这里切模式
 /*
  * 1 DIRECT     飞机 CMD 0x10 直驱加速度, 不跑 NN
  * 2 FULL_AUTO  本地航点 TSP 排序 → wp_queue → 上电自跑
