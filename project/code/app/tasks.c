@@ -311,7 +311,8 @@ static void task_20hz_planner(void) {
     if (rx.wp_seq != s_last_wp_seq) {
         s_last_wp_seq = rx.wp_seq;
         wp_clear();
-        /* 飞机发 cm, 车用 m: 转换. 跳过 visited_last */
+        /* 飞机发 cm, 车用 m: 转换. 跳过 visited_last, 但不能全空 */
+        u8 pushed = 0;
         for (u8 i = 0; i < REMOTE_WP_COUNT; i++) {
             Waypoint w = { rx.wp[i].x * 0.01f, rx.wp[i].y * 0.01f };
             if (s_vst_visited_valid) {
@@ -320,7 +321,24 @@ static void task_20hz_planner(void) {
                 if (dx*dx + dy*dy < TOL_XY * TOL_XY) continue;
             }
             wp_push(&w);
+            pushed++;
         }
+        /* 防死锁: 全被visited_last过滤 → 全push, 不能空队 */
+        if (pushed == 0) {
+            for (u8 i = 0; i < REMOTE_WP_COUNT; i++) {
+                Waypoint w = { rx.wp[i].x * 0.01f, rx.wp[i].y * 0.01f };
+                wp_push(&w);
+            }
+        }
+        /* 收WP即启动, 不依赖 CMD 0x31 */
+        if (!g_wp_active && wp_count() > 0) {
+            g_wp_active = true;
+            g_vst = g_car;
+            g_vst_prev = *(Waypoint*)&g_car;
+            lateral_reset();
+            printf("AUTO-START\r\n");
+        }
+        printf("RX30:%u q=%u active=%d\r\n", rx.wp_seq, wp_count(), g_wp_active);
     }
     if (rx.start_seq != s_last_start_seq) {
         s_last_start_seq = rx.start_seq;
