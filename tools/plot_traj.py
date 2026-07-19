@@ -44,13 +44,14 @@ def parse_log(path: str) -> dict[str, np.ndarray]:
     return {k: arr[:, i] for i, k in enumerate(header)}
 
 
-# Local waypoints (MODE 2/4) — TSP sorted order
+# Local waypoints (MODE 2/4)
 WAYPOINTS = np.array([
-    [1.09,  0.115],
-    [3.675, 0.785],
-    [4.40, -0.755],
-    [4.17, -2.73],
-    [2.50, -2.395],
+    [1.715,  0.815],
+    [3.445,  1.43],
+    [4.565,  0.095],
+    [2.965, -0.075],
+    [3.70,  -1.48],
+    [1.91,  -1.09],
 ])
 
 # Start position

@@ -72,9 +72,8 @@ static Waypoint       g_vst_prev;   /* 上周期 vst 位置 (线段碰撞检测�
 /* ── 本地航点 (MODE 2/4 用) ── */
 #if CAR_MODE == 2 || CAR_MODE == 4
 static const Waypoint g_local_targets[LOCAL_WP_COUNT] = {
-    // {1.21f, 0.50f}, {3.80f, 1.17f}, {2.63f, -2.0f}, {4.28f, -2.28f}, {4.53f, -0.35f},
-    // {1.09f, 0.115f}, {3.675f, 0.785f}, {4.40f, -0.755f}, {4.17f, -2.73f}, {2.50f, -2.395f},
-    {3.675f, 0.785f}, {4.17f, -2.73f}, {2.50f, -2.395f}, {1.09f, 0.115f}, {4.40f, -0.755f}, 
+    {1.715f, 0.815f}, {3.445f, 1.43f}, {4.565f, 0.095f},
+    {2.965f, -0.075f}, {3.70f, -1.48f}, {1.91f, -1.09f},
 };
 #endif
 
@@ -212,17 +211,8 @@ void tasks_init(void) {
     g_wp_active = false;
     g_plan.a = 0.0f; g_plan.omega = 0.0f;
 
-    /* MODE 2: 按列表顺序推入航点 → 末尾追加起点 */
-#if CAR_MODE == 2
-    {
-        wp_push_n(g_local_targets, LOCAL_WP_COUNT);
-        Waypoint home = {CAR_START_X, CAR_START_Y};
-        wp_push(&home);
-    }
-#endif
-
-    /* MODE 4: TSP 排序本地航点 → 推入队列 → 末尾追加起点 */
-#if CAR_MODE == 4
+    /* MODE 2/4: TSP 排序本地航点 → 推入队列 → 末尾追加起点 */
+#if CAR_MODE == 2 || CAR_MODE == 4
     {
         Waypoint ordered[MAX_WAYPOINTS];
         tsp_solve(ordered, g_local_targets, LOCAL_WP_COUNT, CAR_START_X, CAR_START_Y);
@@ -297,7 +287,7 @@ static void task_20hz_planner(void) {
         g_wp_active = false;
         g_vst = g_car;
         g_vst_prev = *(Waypoint*)&g_car;
-    lateral_reset();
+        lateral_reset();
         g_plan.a = 0.0f; g_plan.omega = 0.0f;
     }
     if (rx.wp_seq != s_last_wp_seq) {
@@ -316,7 +306,7 @@ static void task_20hz_planner(void) {
         g_wp_active = true;
         g_vst = g_car;
         g_vst_prev = *(Waypoint*)&g_car;
-    lateral_reset();
+        lateral_reset();
     }
     if (!g_wp_active) return;
     wp_planner_step();
@@ -335,7 +325,7 @@ static void task_20hz_planner(void) {
         g_wp_active = false;
         g_vst = g_car;
         g_vst_prev = *(Waypoint*)&g_car;
-    lateral_reset();
+        lateral_reset();
         g_plan.a = 0.0f; g_plan.omega = 0.0f;
     }
     if (rx.start_seq != s_last_start_seq) {
@@ -343,7 +333,7 @@ static void task_20hz_planner(void) {
         g_wp_active = true;
         g_vst = g_car;
         g_vst_prev = *(Waypoint*)&g_car;
-    lateral_reset();
+        lateral_reset();
     }
     if (!g_wp_active) return;
     wp_planner_step();
@@ -353,16 +343,20 @@ static void task_20hz_planner(void) {
 /* ═══════════════════════════════════════════════════════════
  *  上报任务 (20Hz main) — 网络跑完立刻发
  *
- *  体轴加速度:
- *    a_fwd = g_plan.a                         (纵向, NN输出)
- *    a_lat = vst.v² × tan(vst.delta) / L      (横向, 单车模型曲率)
+ *  体轴加速度 → 世界 NWU:
+ *    a_fwd = g_plan.a           (纵向, body前)
+ *    a_lat = g_car.v * g_plan.omega  (横向, body左, 向心加速度)
+ *    a_n   = a_fwd·cosθ − a_lat·sinθ
+ *    a_w   = a_fwd·sinθ + a_lat·cosθ
  * ═══════════════════════════════════════════════════════════ */
 static void task_20hz_report(void) {
+    f32 ct = cosf(g_car.theta), st = sinf(g_car.theta);
     f32 a_fwd = g_plan.a;
-    f32 curvature = tanf(g_vst.delta) * INV_WHEELBASE;
-    f32 a_lat = g_vst.v * g_vst.v * curvature;
+    f32 a_lat = g_car.v * g_plan.omega;
+    f32 a_n   = a_fwd * ct - a_lat * st;
+    f32 a_w   = a_fwd * st + a_lat * ct;
 
-    car_comm_send(a_fwd, a_lat, g_car.x * 100.0f, g_car.y * 100.0f, g_car.theta);
+    car_comm_send(a_n, a_w, g_car.x * 100.0f, g_car.y * 100.0f);
 }
 
 /* ═══════════════════════════════════════════════════════════

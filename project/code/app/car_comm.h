@@ -8,7 +8,7 @@
  *   CMD 0x32 STOP     停止+复位   (LEN=0)
  *
  * 发送帧 (车→飞机):
- *   CMD 0x20 STATUS   a_fwd, a_lat, world_x, world_y, theta (LEN=20, 体轴+INS)
+ *   CMD 0x20 STATUS   a_n, a_w, world_x, world_y (LEN=16, NWU)
  */
 #ifndef CAR_COMM_H
 #define CAR_COMM_H
@@ -38,7 +38,7 @@ typedef struct {
 } car_comm_rx_t;
 
 void          car_comm_init(void);
-void          car_comm_send(f32 a_fwd, f32 a_lat, f32 world_x, f32 world_y, f32 theta);
+void          car_comm_send(f32 a_des, f32 omega_des, f32 world_x, f32 world_y);
 car_comm_rx_t car_comm_get(void);
 
 #endif

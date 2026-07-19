@@ -1,5 +1,5 @@
 /**
- * lateral.c — LQR 横向跟踪器 (200Hz), 6-term with ey integral
+ * lateral.c — LQR 横向跟踪器 (200Hz), 6-term with ey integral (Ki=0)
  *
  * 6 gains: [Ki, K_ey, K_ey_d, K_eth, K_eth_d, K_ed]
  *   ey_int = ∫ ey·dt  (anti-windup clamped)
