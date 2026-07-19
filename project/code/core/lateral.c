@@ -10,7 +10,7 @@
 #include "utils.h"
 
 #define N_GAINS 6
-#define EY_INT_MAX  0.3f    /* anti-windup clamp [m·s] */
+#define EY_INT_MAX  0.5f    /* anti-windup clamp [m·s] */
 
 static f32 g_ey_int;
 

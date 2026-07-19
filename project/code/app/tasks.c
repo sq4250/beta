@@ -73,7 +73,8 @@ static Waypoint       g_vst_prev;   /* 上周期 vst 位置 (线段碰撞检测�
 #if CAR_MODE == 2 || CAR_MODE == 4
 static const Waypoint g_local_targets[LOCAL_WP_COUNT] = {
     // {1.21f, 0.50f}, {3.80f, 1.17f}, {2.63f, -2.0f}, {4.28f, -2.28f}, {4.53f, -0.35f},
-    {1.09f, 0.115f}, {3.675f, 0.785f}, {4.40f, -0.755f}, {4.17f, -2.73f}, {2.50f, -2.395f},
+    // {1.09f, 0.115f}, {3.675f, 0.785f}, {4.40f, -0.755f}, {4.17f, -2.73f}, {2.50f, -2.395f},
+    {3.675f, 0.785f}, {4.17f, -2.73f}, {2.50f, -2.395f}, {1.09f, 0.115f}, {4.40f, -0.755f}, 
 };
 #endif
 
@@ -211,8 +212,17 @@ void tasks_init(void) {
     g_wp_active = false;
     g_plan.a = 0.0f; g_plan.omega = 0.0f;
 
-    /* MODE 2/4: TSP 排序本地航点 → 推入队列 → 末尾追加起点 */
-#if CAR_MODE == 2 || CAR_MODE == 4
+    /* MODE 2: 按列表顺序推入航点 → 末尾追加起点 */
+#if CAR_MODE == 2
+    {
+        wp_push_n(g_local_targets, LOCAL_WP_COUNT);
+        Waypoint home = {CAR_START_X, CAR_START_Y};
+        wp_push(&home);
+    }
+#endif
+
+    /* MODE 4: TSP 排序本地航点 → 推入队列 → 末尾追加起点 */
+#if CAR_MODE == 4
     {
         Waypoint ordered[MAX_WAYPOINTS];
         tsp_solve(ordered, g_local_targets, LOCAL_WP_COUNT, CAR_START_X, CAR_START_Y);
