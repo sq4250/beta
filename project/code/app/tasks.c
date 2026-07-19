@@ -68,6 +68,10 @@ static volatile u32  g_ms;
 static f32           g_ey, g_ex;   /* 跟踪误差, ISR 写入 / debug 读取 */
 static bool          g_wp_active;  /* 航点执行进行中 */
 static Waypoint       g_vst_prev;   /* 上周期 vst 位置 (线段碰撞检测起点) */
+#if CAR_MODE == 3
+static Waypoint       s_vst_visited_last;      /* 车端屏蔽, 单slot, 收WP时跳过 */
+static bool           s_vst_visited_valid;
+#endif
 
 /* ── 本地航点 (MODE 2/4 用) ── */
 #if CAR_MODE == 2 || CAR_MODE == 4
@@ -183,7 +187,17 @@ static void wp_planner_step(void) {
         }
     }
 #endif
-    /* MODE 3: 不弹窗, 飞机视觉确认到达后才发新窗口覆盖 */
+
+#if CAR_MODE == 3
+    {
+        Waypoint cur = wp_peek(0);
+        f32 dx = g_vst.x - cur.x, dy = g_vst.y - cur.y;
+        if (dx*dx + dy*dy < TOL_XY * TOL_XY) {
+            s_vst_visited_last = cur;
+            s_vst_visited_valid = true;
+        }
+    }
+#endif
 
     Waypoint g1 = wp_peek(0);
     Waypoint g2 = cnt > 1 ? wp_peek(1) : g1;
@@ -209,6 +223,9 @@ void tasks_init(void) {
 
     wp_clear();
     g_wp_active = false;
+#if CAR_MODE == 3
+    s_vst_visited_valid = false;
+#endif
     g_plan.a = 0.0f; g_plan.omega = 0.0f;
 
     /* MODE 2/4: TSP 排序本地航点 → 推入队列 → 末尾追加起点 */
@@ -288,25 +305,32 @@ static void task_20hz_planner(void) {
         g_vst = g_car;
         g_vst_prev = *(Waypoint*)&g_car;
         lateral_reset();
+        s_vst_visited_valid = false;
         g_plan.a = 0.0f; g_plan.omega = 0.0f;
     }
     if (rx.wp_seq != s_last_wp_seq) {
         s_last_wp_seq = rx.wp_seq;
         wp_clear();
-        /* 飞机发 cm, 车用 m: 转换 */
-        Waypoint wp_m[REMOTE_WP_COUNT];
+        /* 飞机发 cm, 车用 m: 转换. 跳过 visited_last */
         for (u8 i = 0; i < REMOTE_WP_COUNT; i++) {
-            wp_m[i].x = rx.wp[i].x * 0.01f;
-            wp_m[i].y = rx.wp[i].y * 0.01f;
+            Waypoint w = { rx.wp[i].x * 0.01f, rx.wp[i].y * 0.01f };
+            if (s_vst_visited_valid) {
+                f32 dx = w.x - s_vst_visited_last.x;
+                f32 dy = w.y - s_vst_visited_last.y;
+                if (dx*dx + dy*dy < TOL_XY * TOL_XY) continue;
+            }
+            wp_push(&w);
         }
-        wp_push_n(wp_m, REMOTE_WP_COUNT);
     }
     if (rx.start_seq != s_last_start_seq) {
         s_last_start_seq = rx.start_seq;
+        /* 首次启动重置 vst, 运行中收到 start 不重置 (防顿挫) */
+        if (!g_wp_active) {
+            g_vst = g_car;
+            g_vst_prev = *(Waypoint*)&g_car;
+            lateral_reset();
+        }
         g_wp_active = true;
-        g_vst = g_car;
-        g_vst_prev = *(Waypoint*)&g_car;
-        lateral_reset();
     }
     if (!g_wp_active) return;
     wp_planner_step();
@@ -352,7 +376,7 @@ static void task_20hz_report(void) {
     f32 curvature = tanf(g_vst.delta) * INV_WHEELBASE;
     f32 a_lat = g_vst.v * g_vst.v * curvature;
 
-    car_comm_send(a_fwd, a_lat, g_car.x * 100.0f, g_car.y * 100.0f, g_car.theta);
+    car_comm_send(a_fwd, a_lat, g_vst.x * 100.0f, g_vst.y * 100.0f, g_car.theta);
 }
 
 /* ═══════════════════════════════════════════════════════════
