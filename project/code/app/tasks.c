@@ -343,20 +343,16 @@ static void task_20hz_planner(void) {
 /* ═══════════════════════════════════════════════════════════
  *  上报任务 (20Hz main) — 网络跑完立刻发
  *
- *  体轴加速度 → 世界 NWU:
- *    a_fwd = g_plan.a           (纵向, body前)
- *    a_lat = g_car.v * g_plan.omega  (横向, body左, 向心加速度)
- *    a_n   = a_fwd·cosθ − a_lat·sinθ
- *    a_w   = a_fwd·sinθ + a_lat·cosθ
+ *  体轴加速度:
+ *    a_fwd = g_plan.a                         (纵向, NN输出)
+ *    a_lat = vst.v² × tan(vst.delta) / L      (横向, 单车模型曲率)
  * ═══════════════════════════════════════════════════════════ */
 static void task_20hz_report(void) {
-    f32 ct = cosf(g_car.theta), st = sinf(g_car.theta);
     f32 a_fwd = g_plan.a;
-    f32 a_lat = g_car.v * g_plan.omega;
-    f32 a_n   = a_fwd * ct - a_lat * st;
-    f32 a_w   = a_fwd * st + a_lat * ct;
+    f32 curvature = tanf(g_vst.delta) * INV_WHEELBASE;
+    f32 a_lat = g_vst.v * g_vst.v * curvature;
 
-    car_comm_send(a_n, a_w, g_car.x * 100.0f, g_car.y * 100.0f);
+    car_comm_send(a_fwd, a_lat, g_car.x * 100.0f, g_car.y * 100.0f, g_car.theta);
 }
 
 /* ═══════════════════════════════════════════════════════════
