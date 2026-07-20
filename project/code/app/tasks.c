@@ -268,7 +268,13 @@ void car_control_update(void) {
     if (g_ms < STARTUP_DELAY_MS) return;
 
     if (div_trk == 0) {
-        tracking_layer_step(&g_cmd, &g_vst, &g_car, &g_plan, g_imu_data.gyro[2]);
+        if (g_wp_active) {
+            tracking_layer_step(&g_cmd, &g_vst, &g_car, &g_plan, g_imu_data.gyro[2]);
+        } else {
+            g_cmd.servo_delta = 0;
+            g_cmd.motor_l = 0; g_cmd.motor_r = 0;
+            g_vst = g_car;   /* vst 跟车同步, 激活时无跳变 */
+        }
         actuators_apply(&g_cmd);
     }
 }
