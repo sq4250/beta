@@ -33,7 +33,7 @@ static void read_quat(f32 q[4]) {
     q[2]=imu660rc_quarternion[2]; q[3]=imu660rc_quarternion[3];
 }
 
-const ImuDriver imu_660rc_driver = { init, read_raw, read_quat };
+const imu_driver_t imu_660rc_driver = { init, read_raw, read_quat };
 
 //===================================================================================================================
 // 原始传感器模式: 同步调用 imu660rc_get_gyro/acc 直接读寄存器
@@ -54,6 +54,6 @@ static void read_raw(i16 g[3], i16 a[3]) {
     a[0]=imu660rc_acc_x;  a[1]=imu660rc_acc_y;  a[2]=imu660rc_acc_z;
 }
 
-const ImuDriver imu_660rc_driver = { init, read_raw, NULL };
+const imu_driver_t imu_660rc_driver = { init, read_raw, NULL };
 
 #endif

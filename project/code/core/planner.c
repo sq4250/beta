@@ -4,9 +4,9 @@
 #include "planner.h"
 #include "kinematics.h"
 
-void planner_forward(PlannerAction *act,
-                     const CarState *vst,
-                     const Waypoint *g1, const Waypoint *g2, const Waypoint *g3
+void planner_forward(planner_action_t *act,
+                     const car_state_t *vst,
+                     const waypoint_t *g1, const waypoint_t *g2, const waypoint_t *g3
     ) {
     f32 inp[8];
     world_to_body_8d(inp, vst, g1, g2, g3);

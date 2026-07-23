@@ -5,7 +5,6 @@
 #ifndef KINEMATICS_H
 #define KINEMATICS_H
 
-#include "car_state.h"
 #include "config.h"
 
 //-------------------------------------------------------------------------------------------------------------------
@@ -17,7 +16,7 @@
 // 使用示例     mcu_kinematics_step(&vst, a_long, omega);
 // 备注信息     Euler积分 dt=CTRL_DT=5ms, 3-clamp内联
 //-------------------------------------------------------------------------------------------------------------------
-void mcu_kinematics_step(CarState *s, f32 a_long, f32 omega);
+void mcu_kinematics_step(car_state_t *s, f32 a_long, f32 omega);
 
 //-------------------------------------------------------------------------------------------------------------------
 // 函数简介     世界→车体 8D变换 (3航点)
@@ -28,6 +27,6 @@ void mcu_kinematics_step(CarState *s, f32 a_long, f32 omega);
 // 使用示例     f32 inp[8]; world_to_body_8d(inp, &s, &wp[0], &wp[1], &wp[2]);
 // 备注信息     与训练完全一致的变换: dx'=dx·cos+dy·sin, dy'=-dx·sin+dy·cos
 //-------------------------------------------------------------------------------------------------------------------
-void world_to_body_8d(f32 out[8], const CarState *s, const Waypoint *g1, const Waypoint *g2, const Waypoint *g3);
+void world_to_body_8d(f32 out[8], const car_state_t *s, const waypoint_t *g1, const waypoint_t *g2, const waypoint_t *g3);
 
 #endif

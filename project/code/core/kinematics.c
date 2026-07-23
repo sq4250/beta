@@ -5,7 +5,7 @@
 #include "kinematics.h"
 #include "utils.h"
 
-void mcu_kinematics_step(CarState *s, f32 a_long, f32 omega) {
+void mcu_kinematics_step(car_state_t *s, f32 a_long, f32 omega) {
     s->v     += clamp(a_long, -A_BRAKE_MAX, A_LONG_MAX) * CTRL_DT;
     s->delta += clamp(omega, -OMEGA_DELTA_MAX, OMEGA_DELTA_MAX) * CTRL_DT;
 
@@ -17,7 +17,7 @@ void mcu_kinematics_step(CarState *s, f32 a_long, f32 omega) {
     s->y     += s->v * sinf(s->theta) * CTRL_DT;
 }
 
-void world_to_body_8d(f32 out[8], const CarState *s, const Waypoint *g1, const Waypoint *g2, const Waypoint *g3) {
+void world_to_body_8d(f32 out[8], const car_state_t *s, const waypoint_t *g1, const waypoint_t *g2, const waypoint_t *g3) {
     f32 ct = cosf(s->theta), st = sinf(s->theta);
     f32 dx1 = g1->x - s->x, dy1 = g1->y - s->y;
     f32 dx2 = g2->x - s->x, dy2 = g2->y - s->y;

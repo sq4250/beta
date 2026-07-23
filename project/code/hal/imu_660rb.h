@@ -4,5 +4,5 @@
 #ifndef IMU_660RB_H
 #define IMU_660RB_H
 #include "hal_imu.h"
-extern const ImuDriver imu_660rb_driver;
+extern const imu_driver_t imu_660rb_driver;
 #endif

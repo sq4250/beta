@@ -11,14 +11,14 @@
 #include "config.h"
 
 struct ImuHandle_ {
-    const ImuDriver *drv;
+    const imu_driver_t *drv;
     f32 acc_factor, gyro_factor;
     f32 bias_gz;
 };
 
 static struct ImuHandle_ g_imu_inst;
 
-ImuHandle hal_imu_create(const ImuDriver *drv) {
+imu_handle_t hal_imu_create(const imu_driver_t *drv) {
     struct ImuHandle_ *h = &g_imu_inst;
     h->drv = drv;
 
@@ -45,9 +45,9 @@ ImuHandle hal_imu_create(const ImuDriver *drv) {
     return h;
 }
 
-void hal_imu_destroy(ImuHandle h) { (void)h; }
+void hal_imu_destroy(imu_handle_t h) { (void)h; }
 
-void hal_imu_read_all(f32 g[3], f32 a[3], const ImuHandle h) {
+void hal_imu_read_all(f32 g[3], f32 a[3], const imu_handle_t h) {
     i16 raw_g[3], raw_a[3]; h->drv->read_raw(raw_g, raw_a);
     g[0] = (f32)raw_g[0] * h->gyro_factor * DEG2RAD;
     g[1] = (f32)raw_g[1] * h->gyro_factor * DEG2RAD;
@@ -56,12 +56,12 @@ void hal_imu_read_all(f32 g[3], f32 a[3], const ImuHandle h) {
     a[1] = (f32)raw_a[1] * h->acc_factor;
     a[2] = (f32)raw_a[2] * h->acc_factor;
 }
-void hal_imu_read_gyro(f32 g[3], const ImuHandle h) {
+void hal_imu_read_gyro(f32 g[3], const imu_handle_t h) {
     f32 a[3]; hal_imu_read_all(g, a, h);
 }
-void hal_imu_read_accel(f32 a[3], const ImuHandle h) {
+void hal_imu_read_accel(f32 a[3], const imu_handle_t h) {
     f32 g[3]; hal_imu_read_all(g, a, h);
 }
-bool hal_imu_has_quat(const ImuHandle h)         { return h->drv->read_quat != NULL; }
-void hal_imu_read_quat(f32 q[4], const ImuHandle h) { h->drv->read_quat(q); }
-f32  hal_imu_gyro_bias_z(const ImuHandle h)         { return h->bias_gz; }
+bool hal_imu_has_quat(const imu_handle_t h)         { return h->drv->read_quat != NULL; }
+void hal_imu_read_quat(f32 q[4], const imu_handle_t h) { h->drv->read_quat(q); }
+f32  hal_imu_gyro_bias_z(const imu_handle_t h)         { return h->bias_gz; }

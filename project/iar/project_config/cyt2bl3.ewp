@@ -172,11 +172,11 @@
                 </option>
                 <option>
                     <name>GenLocaleTags</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>GenLocaleDisplayOnly</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>DSPExtension</name>
@@ -275,15 +275,15 @@
                 </option>
                 <option>
                     <name>CCDiagRemark</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>CCDiagWarning</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>CCDiagError</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>CCObjPrefix</name>
@@ -312,7 +312,7 @@
                 </option>
                 <option>
                     <name>IExtraOptions</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>CCLangConformance</name>
@@ -348,7 +348,7 @@
                 </option>
                 <option>
                     <name>PreInclude</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>CCIncludePath2</name>
@@ -533,15 +533,15 @@
                 </option>
                 <option>
                     <name>AWarnOne</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>AWarnRange1</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>AWarnRange2</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>ADebug</name>
@@ -553,7 +553,7 @@
                 </option>
                 <option>
                     <name>ADefines</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>AList</name>
@@ -645,7 +645,7 @@
                 </option>
                 <option>
                     <name>AUserIncludes</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>AExtraOptionsCheckV2</name>
@@ -653,7 +653,7 @@
                 </option>
                 <option>
                     <name>AExtraOptionsV2</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>AsmNoLiteralPool</name>
@@ -661,7 +661,7 @@
                 </option>
                 <option>
                     <name>PreInclude</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>A_32_64Device</name>
@@ -703,8 +703,8 @@
             <name>CUSTOM</name>
             <archiveVersion>3</archiveVersion>
             <data>
-                <extensions></extensions>
-                <cmdline></cmdline>
+                <extensions />
+                <cmdline />
                 <hasPrio>1</hasPrio>
                 <buildSequence>inputOutputBased</buildSequence>
             </data>
@@ -734,27 +734,27 @@
                 </option>
                 <option>
                     <name>IlinkKeepSymbols</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkRawBinaryFile</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkRawBinarySymbol</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkRawBinarySegment</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkRawBinaryAlign</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkDefines</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkConfigDefines</name>
@@ -795,7 +795,7 @@
                 </option>
                 <option>
                     <name>IlinkIcfFileSlave</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkEnableRemarks</name>
@@ -803,19 +803,19 @@
                 </option>
                 <option>
                     <name>IlinkSuppressDiags</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkTreatAsRem</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkTreatAsWarn</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkTreatAsErr</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkWarningsAreErrors</name>
@@ -827,7 +827,7 @@
                 </option>
                 <option>
                     <name>IlinkExtraOptions</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkLowLevelInterfaceSlave</name>
@@ -974,11 +974,11 @@
                 </option>
                 <option>
                     <name>IlinkStackControlFile</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkStackCallGraphFile</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>CrcAlgorithm</name>
@@ -1000,7 +1000,7 @@
                 </option>
                 <option>
                     <name>IlinkIcfFile_AltDefault</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkEncInput</name>
@@ -1032,19 +1032,19 @@
                 </option>
                 <option>
                     <name>IlinkRawBinaryFile2</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkRawBinarySymbol2</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkRawBinarySegment2</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkRawBinaryAlign2</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkLogCrtRoutineSelection</name>
@@ -1072,7 +1072,7 @@
                 </option>
                 <option>
                     <name>IlinkWrapperFile</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkProcessor</name>
@@ -1093,7 +1093,7 @@
                 <debug>1</debug>
                 <option>
                     <name>IarchiveInputs</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IarchiveOverride</name>
@@ -1146,11 +1146,11 @@
                 </option>
                 <option>
                     <name>Input description</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>Output description</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>GOutputBinary</name>
@@ -1172,7 +1172,7 @@
                 </option>
                 <option>
                     <name>RTDescription</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>OGProductVersion</name>
@@ -1180,11 +1180,11 @@
                 </option>
                 <option>
                     <name>OGLastSavedByProductVersion</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>OGChipSelectEditMenu</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>GenLowLevelInterface</name>
@@ -1204,7 +1204,7 @@
                 </option>
                 <option>
                     <name>RTConfigPath2</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>GBECoreSlave</name>
@@ -1282,11 +1282,11 @@
                 </option>
                 <option>
                     <name>GenLocaleTags</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>GenLocaleDisplayOnly</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>DSPExtension</name>
@@ -1377,19 +1377,19 @@
                 </option>
                 <option>
                     <name>CCDiagSuppress</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>CCDiagRemark</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>CCDiagWarning</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>CCDiagError</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>CCObjPrefix</name>
@@ -1418,7 +1418,7 @@
                 </option>
                 <option>
                     <name>IExtraOptions</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>CCLangConformance</name>
@@ -1446,7 +1446,7 @@
                 </option>
                 <option>
                     <name>OutputFile</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>CCLibConfigHeader</name>
@@ -1454,11 +1454,15 @@
                 </option>
                 <option>
                     <name>PreInclude</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>CCIncludePath2</name>
-                    <state></state>
+                    <state />
+                    <state>$PROJ_DIR$\..\..\code</state>
+                    <state>$PROJ_DIR$\..\..\code\app</state>
+                    <state>$PROJ_DIR$\..\..\code\core</state>
+                    <state>$PROJ_DIR$\..\..\code\hal</state>
                 </option>
                 <option>
                     <name>CCStdIncCheck</name>
@@ -1618,15 +1622,15 @@
                 </option>
                 <option>
                     <name>AWarnOne</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>AWarnRange1</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>AWarnRange2</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>ADebug</name>
@@ -1638,7 +1642,7 @@
                 </option>
                 <option>
                     <name>ADefines</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>AList</name>
@@ -1714,7 +1718,7 @@
                 </option>
                 <option>
                     <name>AOutputFile</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>ALimitErrorsCheck</name>
@@ -1730,7 +1734,7 @@
                 </option>
                 <option>
                     <name>AUserIncludes</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>AExtraOptionsCheckV2</name>
@@ -1738,7 +1742,7 @@
                 </option>
                 <option>
                     <name>AExtraOptionsV2</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>AsmNoLiteralPool</name>
@@ -1746,7 +1750,7 @@
                 </option>
                 <option>
                     <name>PreInclude</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>A_32_64Device</name>
@@ -1772,7 +1776,7 @@
                 </option>
                 <option>
                     <name>OOCOutputFile</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>OOCCommandLineProducer</name>
@@ -1788,8 +1792,8 @@
             <name>CUSTOM</name>
             <archiveVersion>3</archiveVersion>
             <data>
-                <extensions></extensions>
-                <cmdline></cmdline>
+                <extensions />
+                <cmdline />
                 <hasPrio>0</hasPrio>
                 <buildSequence>inputOutputBased</buildSequence>
             </data>
@@ -1819,31 +1823,31 @@
                 </option>
                 <option>
                     <name>IlinkKeepSymbols</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkRawBinaryFile</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkRawBinarySymbol</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkRawBinarySegment</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkRawBinaryAlign</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkDefines</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkConfigDefines</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkMapFile</name>
@@ -1879,7 +1883,7 @@
                 </option>
                 <option>
                     <name>IlinkIcfFileSlave</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkEnableRemarks</name>
@@ -1887,19 +1891,19 @@
                 </option>
                 <option>
                     <name>IlinkSuppressDiags</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkTreatAsRem</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkTreatAsWarn</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkTreatAsErr</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkWarningsAreErrors</name>
@@ -1911,7 +1915,7 @@
                 </option>
                 <option>
                     <name>IlinkExtraOptions</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkLowLevelInterfaceSlave</name>
@@ -1923,7 +1927,7 @@
                 </option>
                 <option>
                     <name>IlinkAdditionalLibs</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkOverrideProgramEntryLabel</name>
@@ -1935,7 +1939,7 @@
                 </option>
                 <option>
                     <name>IlinkProgramEntryLabel</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>DoFill</name>
@@ -2058,11 +2062,11 @@
                 </option>
                 <option>
                     <name>IlinkStackControlFile</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkStackCallGraphFile</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>CrcAlgorithm</name>
@@ -2084,7 +2088,7 @@
                 </option>
                 <option>
                     <name>IlinkIcfFile_AltDefault</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkEncInput</name>
@@ -2116,19 +2120,19 @@
                 </option>
                 <option>
                     <name>IlinkRawBinaryFile2</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkRawBinarySymbol2</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkRawBinarySegment2</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkRawBinaryAlign2</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkLogCrtRoutineSelection</name>
@@ -2156,7 +2160,7 @@
                 </option>
                 <option>
                     <name>IlinkWrapperFile</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IlinkProcessor</name>
@@ -2177,7 +2181,7 @@
                 <debug>0</debug>
                 <option>
                     <name>IarchiveInputs</name>
-                    <state></state>
+                    <state />
                 </option>
                 <option>
                     <name>IarchiveOverride</name>
@@ -2195,93 +2199,6 @@
             <data />
         </settings>
     </configuration>
-    <group>
-        <name>code</name>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\本文件夹作用.txt</name>
-        </file>
-    </group>
-    <group>
-        <name>core</name>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\core\estimator.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\core\kinematics.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\core\longitudinal.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\core\nn_model_v1p5.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\core\nn_model_v20.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\core\nn_model_v2p5.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\core\nn_model_v30.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\core\planner.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\core\lateral.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\utils.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\core\waypoint_mgr.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\core\tsp.c</name>
-        </file>
-    </group>
-    <group>
-        <name>hal</name>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\hal\hal_encoder.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\hal\hal_imu.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\hal\hal_motor.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\hal\hal_servo.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\hal\hal_tick.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\hal\imu_660ra.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\hal\imu_660rc.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\hal\hal_uart.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\hal\hal_led.c</name>
-        </file>
-    </group>
-    <group>
-        <name>app</name>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\app\car_comm.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\app\scheduler.c</name>
-        </file>
-        <file>
-            <name>$PROJ_DIR$\..\..\code\app\tasks.c</name>
-        </file>
-    </group>
     <group>
         <name>doc</name>
         <file>
@@ -3175,5 +3092,185 @@
         <file>
             <name>$PROJ_DIR$\..\..\..\libraries\zf_driver\zf_driver_uart.h</name>
         </file>
+    </group>
+    <group>
+        <name>code</name>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\common.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\config.h</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\utils.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\..\..\code\utils.h</name>
+        </file>
+        <group>
+            <name>app</name>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\app\car_comm.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\app\car_comm.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\app\planner_task.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\app\scheduler.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\app\scheduler.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\app\tasks.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\app\tasks.h</name>
+            </file>
+        </group>
+        <group>
+            <name>core</name>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\estimator.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\estimator.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\kinematics.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\kinematics.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\lateral.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\lateral.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\longitudinal.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\longitudinal.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\lqr_gains.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_v1p5.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_v1p5.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_v20.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_v20.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_v2p5.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_v2p5.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_v30.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_v30.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\planner.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\planner.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\tsp.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\tsp.h</name>
+            </file>
+        </group>
+        <group>
+            <name>hal</name>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\hal_encoder.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\hal_encoder.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\hal_imu.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\hal_imu.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\hal_led.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\hal_led.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\hal_motor.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\hal_motor.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\hal_servo.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\hal_servo.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\hal_tick.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\hal_tick.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\hal_uart.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\hal_uart.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\icm20602.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\icm20602.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\imu_660ra.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\imu_660ra.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\imu_660rb.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\imu_660rb.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\imu_660rc.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\imu_660rc.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\imu_963ra.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\hal\imu_963ra.h</name>
+            </file>
+        </group>
     </group>
 </project>

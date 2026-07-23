@@ -4,7 +4,7 @@
 #include "tsp.h"
 #include <string.h>
 
-void tsp_solve(Waypoint *ordered, const Waypoint *unordered, u32 count,
+void tsp_solve(waypoint_t *ordered, const waypoint_t *unordered, u32 count,
                f32 start_x, f32 start_y) {
     if (count == 0) return;
     if (count > MAX_WAYPOINTS) count = MAX_WAYPOINTS;

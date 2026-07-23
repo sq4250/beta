@@ -44,25 +44,27 @@ typedef double              f64;
 #define DEG2RAD  0.017453292f   // = π/180
 
 //===================================================管道数据协议===================================================
-typedef struct { f32 left; f32 right; } Encoder;
+typedef struct { f32 left; f32 right; } encoder_t;
 
 typedef struct {
     f32 gyro[3];             // 陀螺三轴 [rad/s] (已去 bias)
     f32 accel[3];            // 加速度三轴 [g] (预留, 校准用 g 单位)
     f32 quat[4];             // 四元数 [w,x,y,z]
     bool has_quat;           // 四元数是否有效
-} ImuData;
+} imu_data_t;
 
 typedef struct {
     f32 a;                    // 纵向加速度 [m/s²]
     f32 omega;                // 转向角速度 [rad/s]
-} PlannerAction;
+} planner_action_t;
 
 typedef struct {
-    f32 servo_delta;         // 舵机前轮转角 [rad]
-    f32 motor_l;             // 左电机油门 [-1, 1]
-    f32 motor_r;             // 右电机油门 [-1, 1]
-} ActuatorCmd;
+    f32 servo_delta;
+    f32 motor_l, motor_r;
+} actuator_cmd_t;
+
+typedef struct { f32 x, y; } waypoint_t;
+typedef struct { f32 x, y, theta, v, delta; } car_state_t;
 //===================================================管道数据协议===================================================
 
 #endif

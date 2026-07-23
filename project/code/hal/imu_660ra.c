@@ -15,4 +15,4 @@ static void read_raw(i16 g[3], i16 a[3]) {
     g[0]=imu660ra_gyro_x; g[1]=imu660ra_gyro_y; g[2]=imu660ra_gyro_z;
     a[0]=imu660ra_acc_x;  a[1]=imu660ra_acc_y;  a[2]=imu660ra_acc_z;
 }
-const ImuDriver imu_660ra_driver = { init, read_raw, NULL };
+const imu_driver_t imu_660ra_driver = { init, read_raw, NULL };

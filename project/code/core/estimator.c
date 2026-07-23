@@ -8,8 +8,8 @@
 
 static f32 g_v_filt = 0.0f;  // EMA 滤波速度
 
-void car_estimate_update(CarState *car, const ImuData *imu,
-                         const Encoder *enc, const ActuatorCmd *cmd
+void car_estimate_update(car_state_t *car, const imu_data_t *imu,
+                         const encoder_t *enc, const actuator_cmd_t *cmd
     ) {
     // ── 偏航融合 ──
     if (imu->has_quat) {
@@ -27,7 +27,7 @@ void car_estimate_update(CarState *car, const ImuData *imu,
     f32 vl = enc->left  * (f32)TRACKER_FREQ;
     f32 vr = enc->right * (f32)TRACKER_FREQ;
     f32 v_raw = (vl + vr) * 0.5f;
-    g_v_filt += SPEED_FILT_ALPHA * (v_raw - g_v_filt);
+    g_v_filt += SPEED_FLT_ALPHA * (v_raw - g_v_filt);
     car->v  = g_v_filt;
 
     // ── 里程计 (使用滤波速度积分) ──

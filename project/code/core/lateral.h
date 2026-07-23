@@ -3,10 +3,9 @@
  */
 #ifndef LATERAL_H
 #define LATERAL_H
-#include "car_state.h"
 #include "config.h"
 
-f32 lateral_step(const CarState *rs, const CarState *vst, f32 omega_ff, f32 gyro_z, f32 ey);
+f32 lateral_step(const car_state_t *rs, const car_state_t *vst, f32 omega_ff, f32 gyro_z, f32 ey);
 void lateral_reset(void);
 
 #endif

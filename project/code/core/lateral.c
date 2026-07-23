@@ -41,7 +41,7 @@ static void lqr_lookup(f32 g[N_GAINS], f32 v) {
     }
 }
 
-f32 lateral_step(const CarState *rs, const CarState *vst, f32 omega_ff, f32 gyro_z, f32 ey
+f32 lateral_step(const car_state_t *rs, const car_state_t *vst, f32 omega_ff, f32 gyro_z, f32 ey
     ) {
     f32 eth  = wrap_pi(vst->theta - rs->theta);
     f32 ey_d = rs->v * sinf(eth);

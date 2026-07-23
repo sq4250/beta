@@ -68,7 +68,7 @@ static void car_comm_feed(u8 byte) {
         /* ── 分发 ── */
         switch (cmd) {
         case 0x10: if (dlen == 8)  { rd_f32(&s_rx.a_n, &s_buf[4], 2); s_rx.a_seq++; }     break;
-        case 0x30: if (dlen == 24) { rd_f32(&s_rx.wp[0].x, &s_buf[4], 6); s_rx.wp_seq++; } break;
+        case 0x30: if (dlen >= 8 && dlen <= 48 && !(dlen & 7)) { rd_f32(&s_rx.wp[0].x, &s_buf[4], dlen / 4); s_rx.n_wp = dlen / 8; s_rx.wp_seq++; } break;
         case 0x31: if (dlen == 0)  { s_rx.start = true;                      s_rx.start_seq++; } break;
         case 0x32: if (dlen == 0)  { s_rx.stop  = true;                      s_rx.stop_seq++;  } break;
         }

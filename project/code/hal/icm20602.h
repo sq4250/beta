@@ -4,5 +4,5 @@
 #ifndef ICM20602_H
 #define ICM20602_H
 #include "hal_imu.h"
-extern const ImuDriver icm20602_driver;
+extern const imu_driver_t icm20602_driver;
 #endif

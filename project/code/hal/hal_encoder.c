@@ -18,7 +18,7 @@ void hal_encoder_init(void) {
     encoder_quad_init(ENC_R_CH, ENC_R_CH1, ENC_R_CH2);
 }
 
-void hal_encoder_get(Encoder *enc) {
+void hal_encoder_get(encoder_t *enc) {
     enc->left  =  (f32)encoder_get_count(ENC_L_CH) * ENCODER_SCALE;
     enc->right = -(f32)encoder_get_count(ENC_R_CH) * ENCODER_SCALE;
     encoder_clear_count(ENC_L_CH);
