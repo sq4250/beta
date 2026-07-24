@@ -269,6 +269,14 @@ void car_control_update(void) {
 
     if (div_trk == 0) {
         if (g_wp_active) {
+            f32 dx = g_vst.x - g_car.x, dy = g_vst.y - g_car.y;
+            if (dx*dx + dy*dy > 0.05f * 0.05f) {  /* 误差>5cm 重同步 */
+                g_vst.x = g_car.x;
+                g_vst.y = g_car.y;
+                g_vst.theta = g_car.theta;
+                g_vst.v = g_car.v;
+                g_vst.delta = g_car.delta;
+            }
             tracking_layer_step(&g_cmd, &g_vst, &g_car, &g_plan, g_imu_data.gyro[2]);
         } else {
             g_cmd.servo_delta = 0;

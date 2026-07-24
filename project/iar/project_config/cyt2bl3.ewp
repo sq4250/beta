@@ -2225,6 +2225,9 @@
             <name>$PROJ_DIR$\..\..\code\core\nn_model_v30.c</name>
         </file>
         <file>
+            <name>$PROJ_DIR$\..\..\code\core\nn_model_2a5.c</name>
+        </file>
+        <file>
             <name>$PROJ_DIR$\..\..\code\core\planner.c</name>
         </file>
         <file>
