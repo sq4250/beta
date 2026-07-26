@@ -21,7 +21,7 @@ void lateral_reset(void) {
 static void lqr_lookup(f32 g[N_GAINS], f32 v) {
     f32 vc = v;
     if (vc < LQR_V_MIN) vc = LQR_V_MIN;
-    if (vc > 4.0f) vc = 4.0f;
+    if (vc > 5.0f) vc = 5.0f;
 
     u32 lo = 0, hi = LQR_SPEED_POINTS - 1;
     while (lo < hi) {

@@ -63,7 +63,7 @@ typedef struct {
     f32 motor_l, motor_r;
 } actuator_cmd_t;
 
-typedef struct { f32 x, y; } waypoint_t;
+typedef struct { u8 slot_id; f32 x, y; } waypoint_t;
 typedef struct { f32 x, y, theta, v, delta; } car_state_t;
 //===================================================管道数据协议===================================================
 

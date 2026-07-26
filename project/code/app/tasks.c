@@ -93,8 +93,17 @@ void car_control_update(void) {
     if (g_ms < STARTUP_DELAY_MS) return;
 
     if (div == 0) {
-        if (g_wp_active) tracking(&s_cmd, &g_vst, &g_car, &g_plan, s_imu.gyro[2]);
-        else { s_cmd.servo_delta = 0; s_cmd.motor_l = 0; s_cmd.motor_r = 0; g_vst = g_car; }
+        if (g_wp_active) {
+            f32 dx = g_vst.x - g_car.x, dy = g_vst.y - g_car.y;
+            if (dx*dx + dy*dy > 0.05f * 0.05f) {  /* 误差>5cm 重同步 */
+                g_vst.x = g_car.x;
+                g_vst.y = g_car.y;
+                g_vst.theta = g_car.theta;
+                g_vst.v = g_car.v;
+                g_vst.delta = g_car.delta;
+            }
+            tracking(&s_cmd, &g_vst, &g_car, &g_plan, s_imu.gyro[2]);
+        } else { s_cmd.servo_delta = 0; s_cmd.motor_l = 0; s_cmd.motor_r = 0; g_vst = g_car; }
         actuators(&s_cmd);
     }
 }

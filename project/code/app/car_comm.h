@@ -3,7 +3,7 @@
 
 /* 飞机→车:
  *   CMD 0x10 ACT      a_n, a_w (LEN=8,  f32×2, m/s²)
- *   CMD 0x30 WP       n 路点   (LEN=n*8, f32×2n, cm)  n≤6
+ *   CMD 0x30 WP       n 路点 (LEN=n, u8 slot_id × n)  n≤6
  *   CMD 0x31 START    启动
  *   CMD 0x32 STOP     停止+复位
  * 车→飞机:
@@ -11,11 +11,11 @@
 
 #define REMOTE_WP_COUNT 6
 
-typedef struct { f32 x, y; } remote_waypoint_t;
+typedef struct { u8 slot_ids[REMOTE_WP_COUNT]; u8 n_wp; u32 wp_seq; } remote_wp_t;
 
 typedef struct {
     f32  a_n, a_w;  u32 a_seq;
-    remote_waypoint_t wp[REMOTE_WP_COUNT]; u32 wp_seq; u8 n_wp;
+    remote_wp_t wp;
     bool start;     u32 start_seq;
     bool stop;      u32 stop_seq;
 } car_comm_rx_t;

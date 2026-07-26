@@ -2,12 +2,12 @@
  * car_comm.c — 变长帧解析 + 帧打包
  *
  * 接收 (飞机→车, UART RX ISR):
- *   CMD 0x10 ACT    LEN=8   a_n, a_w [m/s²]
- *   CMD 0x30 WP     LEN=24  3×(x,y) [cm]
- *   CMD 0x31 START  LEN=0   启动信号
+ *   CMD 0x10 ACT    LEN=8    a_n, a_w [m/s²]
+ *   CMD 0x30 WP     LEN=n    u8 slot_id × n  n≤6
+ *   CMD 0x31 START  LEN=0    启动信号
  *
  * 发送 (车→飞机, task 层):
- *   CMD 0x20 STATUS LEN=20  a_fwd, a_lat [m/s²], world_x, world_y [cm], theta [rad]
+ *   CMD 0x20 STATUS LEN=20   a_fwd, a_lat [m/s²], world_x, world_y [cm], theta [rad]
  */
 #include "car_comm.h"
 #include "hal_uart.h"
@@ -15,7 +15,7 @@
 
 #define FRM_HDR0  0xAA
 #define FRM_HDR1  0x55
-#define BUF_MAX   32   /* 最大帧 4+24+1=29 */
+#define BUF_MAX   32
 
 static volatile car_comm_rx_t s_rx;
 static u8  s_buf[BUF_MAX];
@@ -68,7 +68,7 @@ static void car_comm_feed(u8 byte) {
         /* ── 分发 ── */
         switch (cmd) {
         case 0x10: if (dlen == 8)  { rd_f32(&s_rx.a_n, &s_buf[4], 2); s_rx.a_seq++; }     break;
-        case 0x30: if (dlen >= 8 && dlen <= 48 && !(dlen & 7)) { rd_f32(&s_rx.wp[0].x, &s_buf[4], dlen / 4); s_rx.n_wp = dlen / 8; s_rx.wp_seq++; } break;
+        case 0x30: if (dlen >= 1 && dlen <= 6) { for (u8 i = 0; i < dlen; i++) s_rx.wp.slot_ids[i] = s_buf[4 + i]; s_rx.wp.n_wp = dlen; s_rx.wp.wp_seq++; } break;
         case 0x31: if (dlen == 0)  { s_rx.start = true;                      s_rx.start_seq++; } break;
         case 0x32: if (dlen == 0)  { s_rx.stop  = true;                      s_rx.stop_seq++;  } break;
         }

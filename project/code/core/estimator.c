@@ -16,9 +16,7 @@ void car_estimate_update(car_state_t *car, const imu_data_t *imu,
         const f32 *q = imu->quat;
         f32 yq = atan2f(2.0f*(q[0]*q[1] + q[2]*q[3]),
                         1.0f - 2.0f*(q[0]*q[0] + q[2]*q[2]));
-        yq = wrap_pi(M_PI_F - yq);  /* 180°偏移 + 符号翻转 (NWU右手系, Z↑逆时针为正) */
-        car->theta = IMU_YAW_ALPHA * (car->theta + imu->gyro[2] * ISR_DT)
-                   + (1.0f - IMU_YAW_ALPHA) * yq;
+        car->theta = wrap_pi(M_PI_F - yq);  /* 180°偏移 + 符号翻转, 纯四元数 */
     } else {
         car->theta += imu->gyro[2] * ISR_DT;
     }

@@ -20,38 +20,47 @@ void wp_push(const waypoint_t *w) { s_wp[s_head] = *w; s_head = (s_head + 1) & W
 void wp_push_n(const waypoint_t *ws, u8 n) { for (u8 i = 0; i < n; i++) wp_push(&ws[i]); }
 waypoint_t wp_peek(u8 off)   { return s_wp[(s_tail + off) & WP_MASK]; }
 void wp_pop(void)          { s_tail = (s_tail + 1) & WP_MASK; }
-static bool wp_eq(const waypoint_t *a, const waypoint_t *b) { f32 dx = a->x - b->x, dy = a->y - b->y; return dx*dx + dy*dy < TOL_XY*TOL_XY; }
-static void wp_remove(const waypoint_t *w) {
+#define SLOT_HOME  0xFF
+
+static void wp_remove_id(u8 id) {
     u8 n = wp_count(); waypoint_t k[WP_QUEUE_SIZE]; u8 kn = 0;
-    for (u8 i = 0; i < n; i++) { waypoint_t q = wp_peek(i); if (!wp_eq(&q, w)) k[kn++] = q; }
+    for (u8 i = 0; i < n; i++) { waypoint_t q = wp_peek(i); if (q.slot_id != id) k[kn++] = q; }
     wp_clear(); for (u8 i = 0; i < kn; i++) wp_push(&k[i]);
 }
-static inline waypoint_t wp_of(const car_state_t *s) { waypoint_t w = {s->x, s->y}; return w; }
+static inline waypoint_t wp_of(const car_state_t *s) { waypoint_t w = {SLOT_HOME, s->x, s->y}; return w; }
+
+static waypoint_t beacon_lookup(u8 slot_id) {
+    waypoint_t w = {slot_id, 0, 0};
+    if (slot_id < BEACON_COUNT) {
+        w.x = BEACON_WORLD[slot_id][0] * 0.01f;
+        w.y = BEACON_WORLD[slot_id][1] * 0.01f;
+    }
+    return w;
+}
 
 /* ── MODE 1 ── */
 #if CAR_MODE == 1
 static u32 s_a_seq;
 #endif
 
-/* ── MODE 2/4 ── */
+/* ── MODE 2/4: 路点表 = 信标表 (共享飞机) ── */
 #if CAR_MODE == 2 || CAR_MODE == 4
-static const waypoint_t s_loc[LOCAL_WP_COUNT] = {
-    {1.715f, 0.815f}, {3.445f, 1.43f}, {4.565f, 0.095f},
-    {2.965f, -0.075f}, {3.70f, -1.48f}, {1.91f, -1.09f},
-};
+static waypoint_t wp_from_table(u8 id) { return beacon_lookup(id); }
 #endif
 
 /* ── MODE 3 ── */
 #if CAR_MODE == 3
-static waypoint_t s_vis;
-static u32     s_start_s, s_stop_s;
+static u8 s_vis_id;
+static bool s_vis_valid;
+static u32 s_start_s, s_stop_s;
 
 static void m3_merge(const car_comm_rx_t *rx) {
     u8 n = wp_count();
-    for (u8 i = 0; i < rx->n_wp; i++) {
-        waypoint_t w = {rx->wp[i].x * 0.01f, rx->wp[i].y * 0.01f};
+    for (u8 i = 0; i < rx->wp.n_wp; i++) {
+        u8 sid = rx->wp.slot_ids[i];
+        waypoint_t w = beacon_lookup(sid);
         bool in = false;
-        for (u8 j = 0; j < n; j++) { waypoint_t q = wp_peek(j); if (wp_eq(&w, &q)) { in = true; break; } }
+        for (u8 j = 0; j < n; j++) { waypoint_t q = wp_peek(j); if (q.slot_id == sid) { in = true; break; } }
         if (!in) { wp_push(&w); n++; }
     }
     if (n > 1) {
@@ -75,7 +84,7 @@ static void m3_stop_cmd(const car_comm_rx_t *rx) {
     if (rx->stop_seq == s_stop_s) return;
     s_stop_s = rx->stop_seq;
     wp_clear(); g_wp_active = false; g_vst = g_car; g_vst_prev = wp_of(&g_car);
-    lateral_reset(); g_plan.a = 0; g_plan.omega = 0;
+    lateral_reset(); s_vis_valid = false; g_plan.a = 0; g_plan.omega = 0;
 }
 #endif
 
@@ -92,7 +101,7 @@ static u8 wp_take_n(waypoint_t *out, u8 n) {
     for (u8 i = 0; i < wp_count() && k < n; i++) {
         waypoint_t w = wp_peek(i);
 #if CAR_MODE == 3
-        if (wp_eq(&w, &s_vis)) continue;
+        if (s_vis_valid && w.slot_id == s_vis_id) continue;
 #endif
         out[k++] = w;
     }
@@ -104,9 +113,9 @@ static void planner_step(void) {
     if (!gn) { g_plan.a = 0; g_plan.omega = 0; return; }
 
     if (check_hit_substep(g_vst_prev.x, g_vst_prev.y, g_vst.x, g_vst.y, g[0].x, g[0].y, TOL_XY)) {
-        wp_remove(&g[0]);
+        wp_remove_id(g[0].slot_id);
 #if CAR_MODE == 3
-        s_vis = g[0];
+        s_vis_id = g[0].slot_id; s_vis_valid = true;
 #endif
         gn = wp_take_n(g, 3);
         if (!gn) { g_plan.a = 0; g_plan.omega = 0; return; }
@@ -123,9 +132,10 @@ void planner_init(void) {
     g_plan.a = 0; g_plan.omega = 0;
 
 #if CAR_MODE == 2 || CAR_MODE == 4
-    waypoint_t o[MAX_WAYPOINTS];
-    tsp_solve(o, s_loc, LOCAL_WP_COUNT, CAR_START_X, CAR_START_Y);
-    wp_push_n(o, LOCAL_WP_COUNT); waypoint_t h = {CAR_START_X, CAR_START_Y}; wp_push(&h);
+    waypoint_t all[MAX_WAYPOINTS];
+    for (u8 i = 0; i < BEACON_COUNT; i++) all[i] = wp_from_table(i);
+    tsp_solve(all, (const waypoint_t *)all, BEACON_COUNT, CAR_START_X, CAR_START_Y);
+    wp_push_n(all, BEACON_COUNT); waypoint_t h = {SLOT_HOME, CAR_START_X, CAR_START_Y}; wp_push(&h);
 #endif
 #if CAR_MODE == 2
     g_wp_active = true; g_vst = g_car; g_vst_prev = wp_of(&g_car); lateral_reset();
@@ -154,9 +164,10 @@ void task_20hz_planner(void) {
 #elif CAR_MODE == 4
     if (rx.stop_seq != s_stop_s) {
         s_stop_s = rx.stop_seq; wp_clear();
-        waypoint_t o[MAX_WAYPOINTS];
-        tsp_solve(o, s_loc, LOCAL_WP_COUNT, CAR_START_X, CAR_START_Y);
-        wp_push_n(o, LOCAL_WP_COUNT); waypoint_t h = {CAR_START_X, CAR_START_Y}; wp_push(&h);
+        waypoint_t all[MAX_WAYPOINTS];
+        for (u8 i = 0; i < BEACON_COUNT; i++) all[i] = wp_from_table(i);
+        tsp_solve(all, (const waypoint_t *)all, BEACON_COUNT, CAR_START_X, CAR_START_Y);
+        wp_push_n(all, BEACON_COUNT); waypoint_t h = {SLOT_HOME, CAR_START_X, CAR_START_Y}; wp_push(&h);
         g_wp_active = false; g_vst = g_car; g_vst_prev = wp_of(&g_car); lateral_reset();
         g_plan.a = 0; g_plan.omega = 0;
     }
