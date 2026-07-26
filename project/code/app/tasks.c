@@ -17,7 +17,7 @@
 
 car_state_t      g_car, g_vst;
 planner_action_t g_plan;
-waypoint_t      g_vst_prev;
+waypoint_t      g_car_prev;
 bool          g_wp_active;
 f32           g_ey, g_ex;
 volatile u32  g_ms;
@@ -102,8 +102,10 @@ void car_control_update(void) {
                 g_vst.v = g_car.v;
                 g_vst.delta = g_car.delta;
             }
-            tracking(&s_cmd, &g_vst, &g_car, &g_plan, s_imu.gyro[2]);
-        } else { s_cmd.servo_delta = 0; s_cmd.motor_l = 0; s_cmd.motor_r = 0; g_vst = g_car; }
+        } else {
+            g_vst = g_car;  /* 等飞机: VST 咬住实车, 速度闭环在线待命 */
+        }
+        tracking(&s_cmd, &g_vst, &g_car, &g_plan, s_imu.gyro[2]);
         actuators(&s_cmd);
     }
 }

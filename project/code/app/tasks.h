@@ -19,7 +19,7 @@ void wp_pop(void);
 
 extern car_state_t      g_car, g_vst;
 extern planner_action_t g_plan;
-extern waypoint_t      g_vst_prev;
+extern waypoint_t      g_car_prev;
 extern bool          g_wp_active;
 extern f32           g_ey, g_ex;
 extern volatile u32  g_ms;
