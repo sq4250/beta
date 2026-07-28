@@ -200,12 +200,17 @@ static void mode3_step(const car_comm_rx_t *rx) {
 
     planner_step();
 
-    /* 飞机巡点消费完毕 → 进入自主巡点模式, 从最后访问的信标开始新一轮 */
+    /* 航点耗尽 → 刹车停车 (自主巡点暂时关闭, 测试通讯) */
+    if (!wp_count()) {
+        g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0;
+    }
+    /*
     if (!wp_count() && !s_auto_active) {
         s_auto_active = true;
         visited_clear();
         visited_mark(s_last_visited);
     }
+    */
 }
 
 #endif
