@@ -57,9 +57,36 @@ static void wp_load_beacons(void) {
     wp_push(&h);
 }
 
-/* visited-beacon (MODE 3 专用, 其余 mode 下 s_vis_valid 恒为 false) */
-static u8   s_vis_id;
-static bool s_vis_valid;
+/* ── 已访问信标集合 (MODE 3 专用) ── */
+static bool s_visited[BEACON_COUNT];
+static u8   s_visited_count;
+static u8   s_last_visited;   /* 最后一个访问的信标 slot_id */
+static bool s_auto_active;    /* 自主巡点模式 (飞机发新点后退出) */
+
+static void visited_mark(u8 slot_id) {
+    if (slot_id < BEACON_COUNT && !s_visited[slot_id]) {
+        s_visited[slot_id] = true;
+        s_visited_count++;
+    }
+}
+static void visited_clear(void) {
+    for (u8 i = 0; i < BEACON_COUNT; i++) s_visited[i] = false;
+    s_visited_count = 0;
+}
+static bool visited_all(void) { return s_visited_count >= BEACON_COUNT; }
+
+/* 加载全部未访问信标 → TSP → 推入队列 */
+static void wp_load_unvisited(void) {
+    waypoint_t all[BEACON_COUNT];
+    u8 n = 0;
+    for (u8 i = 0; i < BEACON_COUNT; i++) {
+        if (!s_visited[i]) all[n++] = beacon_lookup(i);
+    }
+    if (n > 1) {
+        tsp_solve(all, (const waypoint_t *)all, n, g_car.x, g_car.y);
+    }
+    for (u8 i = 0; i < n; i++) wp_push(&all[i]);
+}
 
 /* ═══════════════════════════════════════════════════════
  * planner_step — 路点跟随核心 (MODE 2/3/4 共用)
@@ -68,20 +95,53 @@ static u8 wp_take_n(waypoint_t *out, u8 n) {
     u8 k = 0;
     for (u8 i = 0; i < wp_count() && k < n; i++) {
         waypoint_t w = wp_peek(i);
-        if (s_vis_valid && w.slot_id == s_vis_id) continue;
+        if (w.slot_id < BEACON_COUNT && s_visited[w.slot_id]) continue;
         out[k++] = w;
     }
     return k;
 }
 
+/* 从信标表补一个离车最近的非 visited 点 */
+static void wp_push_nearest(void) {
+    f32 best_d2 = 1e12f; u8 best_id = 0xFF;
+    for (u8 i = 0; i < BEACON_COUNT; i++) {
+        if (s_visited[i]) continue;
+        f32 dx = BEACON_WORLD[i][0] * 0.01f - g_car.x;
+        f32 dy = BEACON_WORLD[i][1] * 0.01f - g_car.y;
+        f32 d2 = dx * dx + dy * dy;
+        if (d2 < best_d2) { best_d2 = d2; best_id = i; }
+    }
+    if (best_id < BEACON_COUNT) {
+        waypoint_t w = beacon_lookup(best_id);
+        wp_push(&w);
+    }
+}
+
 static void planner_step(void) {
     waypoint_t g[3]; u8 gn = wp_take_n(g, 3);
-    if (!gn) { g_plan.a = 0; g_plan.omega = 0; return; }
+
+    /* 队列空 → 自主模式: 加载未访问信标; 全访问过 → 重置重新一轮 */
+    if (!gn) {
+        if (s_auto_active) {
+            if (visited_all()) visited_clear();
+            wp_load_unvisited();
+            gn = wp_take_n(g, 3);
+        }
+        if (!gn) { g_plan.a = 0; g_plan.omega = 0; return; }
+    }
 
     if (check_hit_substep(g_car_prev.x, g_car_prev.y, g_car.x, g_car.y, g[0].x, g[0].y, TOL_XY)) {
+        s_last_visited = g[0].slot_id;
+        visited_mark(g[0].slot_id);
         wp_remove_id(g[0].slot_id);
-        s_vis_id = g[0].slot_id; s_vis_valid = true;
         gn = wp_take_n(g, 3);
+        if (!gn) {
+            if (s_auto_active) {
+                if (visited_all()) visited_clear();
+                wp_load_unvisited();
+                gn = wp_take_n(g, 3);
+            }
+        }
         if (!gn) { g_plan.a = 0; g_plan.omega = 0; return; }
     }
 
@@ -111,25 +171,41 @@ static void mode2_step(const car_comm_rx_t *rx) {
 #if CAR_MODE == 3
 
 static void mode3_merge(const car_comm_rx_t *rx) {
-    u8 n = wp_count();
+    bool has_new = false;
     for (u8 i = 0; i < rx->wp.n_wp; i++) {
         u8 sid = rx->wp.slot_ids[i];
         waypoint_t w = beacon_lookup(sid);
         bool in = false;
+        u8 n = wp_count();
         for (u8 j = 0; j < n; j++) { waypoint_t q = wp_peek(j); if (q.slot_id == sid) { in = true; break; } }
-        if (!in) { wp_push(&w); n++; }
+        if (!in) { wp_push(&w); has_new = true; }
     }
-    if (n > 1) {
-        waypoint_t a[WP_QUEUE_SIZE]; for (u8 i = 0; i < n; i++) a[i] = wp_peek(i);
-        tsp_solve(a, (const waypoint_t *)a, n, g_car.x, g_car.y);
-        wp_clear(); for (u8 i = 0; i < n; i++) wp_push(&a[i]);
+    if (has_new) {
+        /* 飞机发新点 → 退出自主巡点, 重新处理飞机指令 */
+        s_auto_active = false;
+        visited_clear();
+        u8 n = wp_count();
+        if (n > 1) {
+            waypoint_t a[WP_QUEUE_SIZE]; for (u8 i = 0; i < n; i++) a[i] = wp_peek(i);
+            tsp_solve(a, (const waypoint_t *)a, n, g_car.x, g_car.y);
+            wp_clear(); for (u8 i = 0; i < n; i++) wp_push(&a[i]);
+        }
+        if (!g_wp_active) wp_activate();
     }
-    if (!g_wp_active && wp_count()) { wp_activate(); }
 }
 
 static void mode3_step(const car_comm_rx_t *rx) {
     mode3_merge(rx);
-    if (g_wp_active) planner_step();
+    if (!g_wp_active) return;
+
+    planner_step();
+
+    /* 飞机巡点消费完毕 → 进入自主巡点模式, 从最后访问的信标开始新一轮 */
+    if (!wp_count() && !s_auto_active) {
+        s_auto_active = true;
+        visited_clear();
+        visited_mark(s_last_visited);
+    }
 }
 
 #endif
@@ -179,7 +255,9 @@ static const struct {
 void planner_init(void) {
     wp_clear(); g_wp_active = false;
     g_plan.a = 0; g_plan.omega = 0;
+#if CAR_MODE != 3
     wp_load_beacons();
+#endif
     if (s_mode.init) s_mode.init();
 }
 
