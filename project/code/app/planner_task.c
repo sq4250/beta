@@ -120,10 +120,10 @@ static void wp_push_nearest(void) {
 static void planner_step(void) {
     waypoint_t g[3]; u8 gn = wp_take_n(g, 3);
 
-    /* 队列空 → 自主模式: 加载未访问信标; 全访问过 → 重置重新一轮 */
+    /* 队列空 → 自主模式: 加载未访问信标; 全访问过 → 新一轮(留最后访问点) */
     if (!gn) {
         if (s_auto_active) {
-            if (visited_all()) visited_clear();
+            if (visited_all()) { u8 last = s_last_visited; visited_clear(); visited_mark(last); }
             wp_load_unvisited();
             gn = wp_take_n(g, 3);
         }
@@ -137,7 +137,7 @@ static void planner_step(void) {
         gn = wp_take_n(g, 3);
         if (!gn) {
             if (s_auto_active) {
-                if (visited_all()) visited_clear();
+                if (visited_all()) { u8 last = s_last_visited; visited_clear(); visited_mark(last); }
                 wp_load_unvisited();
                 gn = wp_take_n(g, 3);
             }
