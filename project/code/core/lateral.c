@@ -1,7 +1,7 @@
 /**
  * lateral.c — LQR 横向跟踪器 (200Hz), 5-term with ey integral
  *
- * 5 gains: [Ki, K_ey, K_eth, K_ethd, K_ed]  (纯 Riccati, 无 alpha 分解)
+ * 5 gains: [Ki, K_ey, K_eth, K_ethd, K_ed]
  *   ey_int = ∫ ey·dt  (anti-windup clamped)
  *   omega_fb = Ki·ey_int + K_ey·ey + K_eth·eth + K_ethd·eth_d + K_ed·ed
  */

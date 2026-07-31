@@ -10,41 +10,28 @@ State-space model (error dynamics in vst frame, 5-state with ey integral):
 
 Cost:  J = q_ey_int*ey_int^2 + q_ey*ey^2 + q_eth*eth^2 + q_ethd*eth_d^2 + r*omega^2
 
-5 Riccati gains → 5 controller gains (no alpha decomposition):
+5 Riccati gains -> 5 controller gains:
   K[0]=Ki, K[1]=K_ey, K[2]=K_eth, K[3]=K_ethd, K[4]=K_ed
 
 Usage:
-  python gen_lqr.py --q-ey-int 0.05 --q-ey 25000 ...
+  python gen_lqr.py --q-ey-int 0.05 --q-ey 25000 --q-eth 3000 --q-ethd 35 -r 1 --wo 15 ...
 """
 
 import argparse
-import sys
 from pathlib import Path
-
 import numpy as np
 from scipy.linalg import solve_continuous_are
 
 DEFAULTS = {
-    "q_ey_int": 0.05,
-    "q_ey":     1.0,
-    "q_eth":    0.5,
-    "q_ethd":   0.30,
-    "r":        0.001,
-    "wo":       30.0,
-    "wheelbase": 0.15,
-    "v_min":    0.1,
-    "v_max":    4.0,
-    "n_speeds": 9,
+    "q_ey_int": 0.05, "q_ey": 1.0, "q_eth": 0.5, "q_ethd": 0.30,
+    "r": 0.001, "wo": 30.0, "wheelbase": 0.15,
+    "v_min": 0.1, "v_max": 4.0, "n_speeds": 9,
     "integral": True,
 }
 
 
-def compute_gains(v: float, q_ey_int: float, q_ey: float, q_eth: float,
-                  q_ethd: float, r: float, wo: float,
-                  wheelbase: float, integral: bool) -> list[float]:
-    """Solve Riccati → 5 gains: [Ki, K_ey, K_eth, K_ethd, K_ed]."""
+def compute_gains(v, q_ey_int, q_ey, q_eth, q_ethd, r, wo, wheelbase, integral):
     L = wheelbase
-
     if integral:
         A = np.array([
             [0.0, 1.0, 0.0,  0.0,     0.0     ],
@@ -56,25 +43,21 @@ def compute_gains(v: float, q_ey_int: float, q_ey: float, q_eth: float,
         B = np.array([[0.0], [0.0], [0.0], [0.0], [1.0]])
         Q = np.diag([q_ey_int, q_ey, q_eth, q_ethd, 0.0])
         R = np.array([[r]])
-
         P = solve_continuous_are(A, B, Q, R)
-        K = np.linalg.solve(R, B.T @ P)   # [Ki, K_ey, K_eth, K_ethd, K_ed]
-
+        K = np.linalg.solve(R, B.T @ P)
         return [K[0, 0], K[0, 1], K[0, 2], K[0, 3], K[0, 4]]
     else:
         A = np.array([
-            [0.0, v,    0.0,  0.0     ],
-            [0.0, 0.0,  1.0,  0.0     ],
-            [0.0, 0.0,  -wo,  wo*v/L  ],
-            [0.0, 0.0,  0.0,  0.0     ],
+            [0.0, v, 0.0,  0.0     ],
+            [0.0, 0.0, 1.0,  0.0     ],
+            [0.0, 0.0, -wo,  wo*v/L  ],
+            [0.0, 0.0, 0.0,  0.0     ],
         ])
         B = np.array([[0.0], [0.0], [0.0], [1.0]])
         Q = np.diag([q_ey, q_eth, q_ethd, 0.0])
         R = np.array([[r]])
-
         P = solve_continuous_are(A, B, Q, R)
-        K = np.linalg.solve(R, B.T @ P)   # [K_ey, K_eth, K_ethd, K_ed]
-
+        K = np.linalg.solve(R, B.T @ P)
         return [K[0, 0], K[0, 1], K[0, 2], K[0, 3]]
 
 
@@ -100,18 +83,15 @@ def format_header(speeds, gains, args):
     cost = (f"J = {args.q_ey_int}*ey_int^2 + " if args.integral else "J = ")
     cost += f"{args.q_ey}*ey^2 + {args.q_eth}*eth^2 + {args.q_ethd}*eth_d^2 + {args.r}*omega^2"
     lines.append(f"/* Cost: {cost}, wo={args.wo} */")
-    lines.append(f"/* L={args.wheelbase}m, v=[{speeds[0]:.1f},{speeds[-1]:.1f}]m/s, "
-                 f"n={n} */")
+    lines.append(f"/* L={args.wheelbase}m, v=[{speeds[0]:.1f},{speeds[-1]:.1f}]m/s, n={n} */")
     lines.append("#ifndef LQR_GAINS_H")
     lines.append("#define LQR_GAINS_H")
     lines.append('#include "common.h"')
     lines.append("")
     lines.append(f"#define LQR_SPEED_POINTS {n}")
     lines.append("")
-
     bp_str = "{" + ", ".join(f"{s:.1f}f" for s in speeds) + "}"
     lines.append(f"static const f32 lqr_speed_bp[] = {bp_str};")
-
     lines.append(f"static const f32 lqr_gains[{n}][{n_gains}] = {{")
     for i, (v, g) in enumerate(zip(speeds, gains)):
         g_str = "{" + ", ".join(f"{x:12.6f}f" for x in g) + "}"
@@ -130,11 +110,9 @@ def format_summary(speeds, gains, args):
     lines.append(f"wo={args.wo}, L={args.wheelbase}m")
     lines.append("")
     if args.integral:
-        hdr = (f"{'v':>6s}  {'Ki':>10s}  {'K_ey':>10s}  "
-               f"{'K_eth':>10s}  {'K_ethd':>10s}  {'K_ed':>10s}")
+        hdr = f"{'v':>6s}  {'Ki':>10s}  {'K_ey':>10s}  {'K_eth':>10s}  {'K_ethd':>10s}  {'K_ed':>10s}"
     else:
-        hdr = (f"{'v':>6s}  {'K_ey':>10s}  "
-               f"{'K_eth':>10s}  {'K_ethd':>10s}  {'K_ed':>10s}")
+        hdr = f"{'v':>6s}  {'K_ey':>10s}  {'K_eth':>10s}  {'K_ethd':>10s}  {'K_ed':>10s}"
     lines.append(hdr)
     lines.append("-" * len(hdr))
     for v, g in zip(speeds, gains):
@@ -150,12 +128,10 @@ def main():
     parser.add_argument("--q-ethd",   type=float, default=DEFAULTS["q_ethd"])
     parser.add_argument("-r",         type=float, default=DEFAULTS["r"])
     parser.add_argument("--wo",       type=float, default=DEFAULTS["wo"])
-    parser.add_argument("--L",        type=float, default=DEFAULTS["wheelbase"],
-                        dest="wheelbase")
+    parser.add_argument("--L",        type=float, default=DEFAULTS["wheelbase"], dest="wheelbase")
     parser.add_argument("--v-min",    type=float, default=DEFAULTS["v_min"])
     parser.add_argument("--v-max",    type=float, default=DEFAULTS["v_max"])
-    parser.add_argument("-N",         type=int,   default=DEFAULTS["n_speeds"],
-                        dest="n_speeds")
+    parser.add_argument("-N",         type=int,   default=DEFAULTS["n_speeds"], dest="n_speeds")
     parser.add_argument("--speeds",   type=str,   default=None)
     parser.add_argument("--no-integral", action="store_false", dest="integral")
     parser.add_argument("-o",         type=str,   default=None)
@@ -169,7 +145,6 @@ def main():
         return
 
     header = format_header(speeds, gains, args)
-
     if args.o:
         out_path = Path(args.o)
         out_path.write_text(header + "\n", encoding="utf-8")
