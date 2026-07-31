@@ -17,4 +17,6 @@ void longitudinal_init(void);
 void longitudinal_step(f32 *thr_l, f32 *thr_r,
                        f32 v_meas, f32 v_ref, f32 a_ref, f32 e_x, f32 delta);
 
+f32 longitudinal_f_hat(void);   /* 返回扰动观测值 */
+
 #endif

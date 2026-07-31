@@ -16,10 +16,12 @@
 static f32 g_z    = 0.0f;  // 降阶 LESO 辅助变量
 static f32 g_u_prev = 0.0f;  // 上周期油门 (延迟反馈抗饱和)
 static f32 g_inv_b0;         // 1/b₀ (init 计算)
+static f32 g_f_hat = 0.0f;   // 观测扰动 (debug 用)
 
 void longitudinal_init(void) {
     g_z      = 0.0f;
     g_u_prev = 0.0f;
+    g_f_hat  = 0.0f;
     g_inv_b0 = 1.0f / LONG_B0;
 }
 
@@ -30,10 +32,10 @@ void longitudinal_step(f32 *thr_l, f32 *thr_r,
     // ── 降阶 LESO: 仅观测扰动 f̂ ──
     f32 z_dot = -LONG_WO * (g_z + (LONG_WO - LONG_ALPHA) * v_meas + LONG_B0 * g_u_prev);
     g_z += z_dot * LONG_DT;
-    f32 f_hat = g_z + LONG_WO * v_meas;
+    g_f_hat = g_z + LONG_WO * v_meas;
 
     // ── PD 控制律 (v_meas 已滤波, 来自观测层) ──
-    f32 u0 = LONG_KP * e_x + LONG_KD * (v_ref - v_meas) + a_ref + LONG_ALPHA * v_meas - f_hat;
+    f32 u0 = LONG_KP * e_x + LONG_KD * (v_ref - v_meas) + a_ref + LONG_ALPHA * v_meas - g_f_hat;
     f32 thr = clamp(u0 * g_inv_b0, -1.0f, 1.0f);
     g_u_prev = thr;
 
@@ -48,3 +50,5 @@ void longitudinal_step(f32 *thr_l, f32 *thr_r,
         *thr_r = thr * (1.0f + hw * inv_R);
     }
 }
+
+f32 longitudinal_f_hat(void) { return g_f_hat; }
