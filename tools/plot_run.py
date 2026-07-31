@@ -110,10 +110,17 @@ def main(path):
     fig.savefig(str(out), dpi=150, facecolor=BG, edgecolor='none'); plt.close()
     print(f'Saved: {out}')
 
-    # 航点统计
-    for i, (wx, wy) in enumerate(WPS):
-        d = np.min(np.sqrt((cx - wx)**2 + (cy - wy)**2))
-        print(f'  WP{i}: min_dist={d*100:.1f}cm')
+    # ── 跟踪精度统计 ──
+    vth_rad = np.deg2rad(vth)
+    ex = (vx - cx) * np.cos(vth_rad) + (vy - cy) * np.sin(vth_rad)
+    ey = (cx - vx) * np.sin(vth_rad) - (cy - vy) * np.cos(vth_rad)
+    eth = (vth - cth + 180) % 360 - 180
+    dist = np.sqrt(ex**2 + ey**2)
+
+    print(f'  横向误差 STD:  {np.std(ey)*100:.1f} cm  (max={np.max(np.abs(ey))*100:.1f} cm)')
+    print(f'  纵向误差 STD:  {np.std(ex)*100:.1f} cm  (max={np.max(np.abs(ex))*100:.1f} cm)')
+    print(f'  跟踪距离 STD:  {np.std(dist)*100:.1f} cm  (max={np.max(dist)*100:.1f} cm)')
+    print(f'  航向误差 STD:  {np.std(eth):.1f} deg  (max={np.max(np.abs(eth)):.1f} deg)')
 
 if __name__ == '__main__':
     p = sys.argv[1] if len(sys.argv) > 1 else str(DATA)

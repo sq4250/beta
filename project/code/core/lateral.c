@@ -1,15 +1,15 @@
 /**
- * lateral.c — LQR 横向跟踪器 (200Hz), 6-term with ey integral (Ki=0)
+ * lateral.c — LQR 横向跟踪器 (200Hz), 5-term with ey integral
  *
- * 6 gains: [Ki, K_ey, K_ey_d, K_eth, K_eth_d, K_ed]
+ * 5 gains: [Ki, K_ey, K_eth, K_ethd, K_ed]  (纯 Riccati, 无 alpha 分解)
  *   ey_int = ∫ ey·dt  (anti-windup clamped)
- *   omega_fb = Ki·ey_int + K_ey·ey + K_ey_d·ey_d + K_eth·eth + K_eth_d·eth_d + K_ed·ed
+ *   omega_fb = Ki·ey_int + K_ey·ey + K_eth·eth + K_ethd·eth_d + K_ed·ed
  */
 #include "lateral.h"
 #include "lqr_gains.h"
 #include "utils.h"
 
-#define N_GAINS 6
+#define N_GAINS 5
 #define EY_INT_MAX  0.5f    /* anti-windup clamp [m·s] */
 
 static f32 g_ey_int;
@@ -54,6 +54,6 @@ f32 lateral_step(const CarState *rs, const CarState *vst, f32 omega_ff, f32 gyro
     else if (g_ey_int < -EY_INT_MAX) g_ey_int = -EY_INT_MAX;
 
     f32 g[N_GAINS]; lqr_lookup(g, vst->v);
-    f32 omega_fb = g[0]*g_ey_int + g[1]*ey + g[2]*ey_d + g[3]*eth + g[4]*eth_d + g[5]*ed;
+    f32 omega_fb = g[0]*g_ey_int + g[1]*ey + g[2]*eth + g[3]*eth_d + g[4]*ed;
     return omega_ff + omega_fb;
 }
