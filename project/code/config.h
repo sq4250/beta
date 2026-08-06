@@ -13,7 +13,9 @@
 #define NN_VER_20          20
 #define NN_VER_30          30
 #define NN_VER_2A5         250
-#define NN_MODEL_VERSION   NN_VER_2A5   /* ← a_max=2.5 v_max=5.0 natural */
+#define NN_VER_KAMM_V1     310
+#define NN_VER_SYM4        320
+#define NN_MODEL_VERSION   NN_VER_SYM4   /* ← 对称摩擦圆 a=4.0 a_lat=4.0 */
 
 #if   NN_MODEL_VERSION == NN_VER_1P5
   #include "core/nn_model_v1p5.h"
@@ -25,6 +27,10 @@
   #include "core/nn_model_v30.h"
 #elif NN_MODEL_VERSION == NN_VER_2A5
   #include "core/nn_model_2a5.h"
+#elif NN_MODEL_VERSION == NN_VER_KAMM_V1
+  #include "core/nn_model_kamm_v1.h"
+#elif NN_MODEL_VERSION == NN_VER_SYM4
+  #include "core/nn_model_sym4.h"
 #endif
 
 //===================================================车体几何===================================================
@@ -93,9 +99,9 @@
 //===================================================纵向 LADRC===================================================
 #define LONG_B0            11.0f      // 控制增益 (v_ss=b0/alpha*thr≈22.5*thr)
 #define LONG_ALPHA         0.5f       // 模型阻尼 (b0/alpha=22.5, 实测匹配)
-#define LONG_WO            20.0f      // LESO 观测带宽 [rad/s] (~2.4Hz)
-#define LONG_KP            25.0f      // 位置误差 P (ωc=6.8rad/s)
-#define LONG_KD            10.0f      // 速度误差 D (ζ=1.0, 临界阻尼)
+#define LONG_WO            4.0f      // LESO 观测带宽 [rad/s] (~2.4Hz)
+#define LONG_KP            1.0f      // 位置误差 P (ωc=6.8rad/s)
+#define LONG_KD            2.0f      // 速度误差 D (ζ=1.0, 临界阻尼)
 #define LONG_DT            CTRL_DT    // 控制周期
 //===================================================纵向 LADRC===================================================
 

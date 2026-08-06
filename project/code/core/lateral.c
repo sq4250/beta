@@ -53,7 +53,7 @@ f32 lateral_step(const CarState *rs, const CarState *vst, f32 omega_ff, f32 gyro
     if      (g_ey_int >  EY_INT_MAX) g_ey_int =  EY_INT_MAX;
     else if (g_ey_int < -EY_INT_MAX) g_ey_int = -EY_INT_MAX;
 
-    f32 g[N_GAINS]; lqr_lookup(g, vst->v);
+    f32 g[N_GAINS]; lqr_lookup(g, rs->v);
     f32 omega_fb = g[0]*g_ey_int + g[1]*ey + g[2]*eth + g[3]*eth_d + g[4]*ed;
     return omega_ff + omega_fb;
 }

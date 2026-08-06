@@ -165,7 +165,7 @@ static void actuators_apply(const ActuatorCmd *cmd) {
 static void wp_planner_step(void) {
     u8 cnt = wp_count();
     if (cnt == 0) {
-        g_plan.a = 0.0f; g_plan.omega = 0.0f;
+        g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f;
 #if CAR_MODE == 2
         g_wp_active = false;
 #endif
@@ -179,7 +179,7 @@ static void wp_planner_step(void) {
         wp_pop();
         cnt = wp_count();
         if (cnt == 0) {
-            g_plan.a = 0.0f; g_plan.omega = 0.0f;
+            g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f;
 #if CAR_MODE == 2
             g_wp_active = false;
 #endif
@@ -279,9 +279,10 @@ void car_control_update(void) {
             }
             tracking_layer_step(&g_cmd, &g_vst, &g_car, &g_plan, g_imu_data.gyro[2]);
         } else {
-            g_cmd.servo_delta = 0;
-            g_cmd.motor_l = 0; g_cmd.motor_r = 0;
-            g_vst = g_car;   /* vst 跟车同步, 激活时无跳变 */
+            /* 航点耗尽 → 主动制动, LADRC 常驻, 位置锁在耗尽点 */
+            g_plan.a = -A_BRAKE_MAX;
+            g_plan.omega = 0.0f;
+            tracking_layer_step(&g_cmd, &g_vst, &g_car, &g_plan, g_imu_data.gyro[2]);
         }
         actuators_apply(&g_cmd);
     }
