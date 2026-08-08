@@ -22,5 +22,23 @@ __pycache__/
 # Claude Code
 .claude/
 
+# LaTeX 编译中间产物
+docs/*.aux
+docs/*.log
+docs/*.fdb_latexmk
+docs/*.fls
+docs/*.synctex.gz
+docs/*.out
+docs/*.toc
+
+# 运行时产物
+tools/*.mp4
+tools/*.csv
+tools/*.png
+
+# 归档
+*.7z
+*.zip
+
 # 临时文件
 project/iar/删除临时文件IAR.bat
