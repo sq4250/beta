@@ -116,12 +116,18 @@ static void imu_read(ImuData *d, const ImuHandle imu) {
 }
 
 /* ═══════════════════════════════════════════════════════════
- *  误差投影: 真实车→虚拟车 (vst 系, e = r - y)
+ *  误差投影: e_world = VST − Car → RotZ(−θ_vst) → VST 系
+ *
+ *  FLU 约定: X+前 Y+左 Z+上
+ *  e_x > 0: 参考车在前方 (应加速)
+ *  e_y > 0: 参考车在左侧 → 真车偏右 (应左转)
  * ═══════════════════════════════════════════════════════════ */
 static void ref_frame_error(f32 *ex, f32 *ey, const CarState *rs, const CarState *vst) {
+    f32 dx = vst->x - rs->x;                    /* e_world = r - y */
+    f32 dy = vst->y - rs->y;
     f32 ct = cosf(vst->theta), st = sinf(vst->theta);
-    *ex = (vst->x - rs->x) * ct + (vst->y - rs->y) * st;
-    *ey = (rs->x - vst->x) * st - (rs->y - vst->y) * ct;
+    *ex =  dx * ct + dy * st;                   /* RotZ(-theta) row 0 */
+    *ey = -dx * st + dy * ct;                   /* RotZ(-theta) row 1 */
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -130,21 +136,20 @@ static void ref_frame_error(f32 *ex, f32 *ey, const CarState *rs, const CarState
 static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst,
                                 const CarState *car,
                                 const PlannerAction *plan, f32 gyro_z) {
-    mcu_kinematics_step(vst, plan->a, plan->omega);
+    f32 a_eff, w_eff;
+    mcu_kinematics_step(vst, plan->a, plan->omega, &a_eff, &w_eff);
 
     f32 e_x, e_y;
     ref_frame_error(&e_x, &e_y, car, vst);
     g_ex = e_x; g_ey = e_y;
 
-    f32 omega_cmd = lateral_step(car, vst, plan->omega, gyro_z, e_y);
-    cmd->servo_delta = clamp(car->delta + omega_cmd * CTRL_DT, -DELTA_MAX, DELTA_MAX);
+    /* LQR 横向: 用物理层有效 omega 做前馈 */
+    f32 omega_cmd = lateral_step(car, vst, w_eff, gyro_z, e_y);
+    cmd->servo_delta = clamp(car->delta + omega_cmd * CTRL_DT, -SERVO_DELTA_MAX, SERVO_DELTA_MAX);
 
-    f32 a_ref = plan->a;
-    if (vst->v >= V_MAX && a_ref > 0.0f) a_ref = 0.0f;
-    if (vst->v <= 0.0f && a_ref < 0.0f) a_ref = 0.0f;
-
+    /* LADRC 纵向: 用物理层有效加速度做前馈 */
     f32 thr_l, thr_r;
-    longitudinal_step(&thr_l, &thr_r, car->v, vst->v, a_ref, e_x, car->delta);
+    longitudinal_step(&thr_l, &thr_r, car->v, vst->v, a_eff, e_x, car->delta);
     cmd->motor_l = thr_l;
     cmd->motor_r = thr_r;
 }
@@ -164,32 +169,20 @@ static void actuators_apply(const ActuatorCmd *cmd) {
 #if CAR_MODE >= 2
 static void wp_planner_step(void) {
     u8 cnt = wp_count();
-    if (cnt == 0) {
-        g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f;
-#if CAR_MODE == 2
-        g_wp_active = false;
-#endif
-        return;
-    }
 
 #if CAR_MODE == 2 || CAR_MODE == 4
-    /* MODE 2/4: 车端自主到达检测 + 弹窗 (vst 线段-圆碰撞) */
-    Waypoint cur = wp_peek(0);
-    if (check_hit_substep(g_vst_prev.x, g_vst_prev.y, g_vst.x, g_vst.y, cur.x, cur.y, TOL_XY)) {
-        wp_pop();
-        cnt = wp_count();
-        if (cnt == 0) {
-            g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f;
-#if CAR_MODE == 2
-            g_wp_active = false;
-#endif
-            return;
+    /* 到达检测 + 弹窗 */
+    if (cnt > 0) {
+        Waypoint cur = wp_peek(0);
+        if (check_hit_substep(g_vst_prev.x, g_vst_prev.y, g_vst.x, g_vst.y, cur.x, cur.y, TOL_XY)) {
+            wp_pop();
+            cnt = wp_count();
         }
     }
 #endif
 
 #if CAR_MODE == 3
-    {
+    if (cnt > 0) {
         Waypoint cur = wp_peek(0);
         f32 dx = g_vst.x - cur.x, dy = g_vst.y - cur.y;
         if (dx*dx + dy*dy < TOL_XY * TOL_XY) {
@@ -199,10 +192,16 @@ static void wp_planner_step(void) {
     }
 #endif
 
-    Waypoint g1 = wp_peek(0);
-    Waypoint g2 = cnt > 1 ? wp_peek(1) : g1;
-    Waypoint g3 = cnt > 2 ? wp_peek(2) : g2;
-    planner_forward(&g_plan, &g_vst, &g1, &g2, &g3);
+    if (cnt == 0) {
+        g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f;
+        return;
+    }
+
+    Waypoint g1 = wp_peek(0), g2, g3;
+    f32 v2 = 0.0f, v3 = 0.0f;
+    if (cnt > 1) { g2 = wp_peek(1); v2 = 1.0f; }
+    if (cnt > 2) { g3 = wp_peek(2); v3 = 1.0f; }
+    planner_forward(&g_plan, &g_vst, &g1, &g2, &g3, v2, v3);
     g_vst_prev = *(Waypoint*)&g_vst;
 }
 #endif
@@ -270,7 +269,7 @@ void car_control_update(void) {
     if (div_trk == 0) {
         if (g_wp_active) {
             f32 dx = g_vst.x - g_car.x, dy = g_vst.y - g_car.y;
-            if (dx*dx + dy*dy > 0.05f * 0.05f) {  /* 误差>5cm 重同步 */
+            if (dx*dx + dy*dy > 0.25f * 0.25f) {  /* 误差>25cm 重同步 */
                 g_vst.x = g_car.x;
                 g_vst.y = g_car.y;
                 g_vst.theta = g_car.theta;
@@ -279,10 +278,9 @@ void car_control_update(void) {
             }
             tracking_layer_step(&g_cmd, &g_vst, &g_car, &g_plan, g_imu_data.gyro[2]);
         } else {
-            /* 航点耗尽 → 主动制动, LADRC 常驻, 位置锁在耗尽点 */
-            g_plan.a = -A_BRAKE_MAX;
-            g_plan.omega = 0.0f;
-            tracking_layer_step(&g_cmd, &g_vst, &g_car, &g_plan, g_imu_data.gyro[2]);
+            g_cmd.servo_delta = 0;
+            g_cmd.motor_l = 0; g_cmd.motor_r = 0;
+            g_vst = g_car;
         }
         actuators_apply(&g_cmd);
     }
@@ -308,7 +306,6 @@ static void task_20hz_planner(void) {
 
 /* ── MODE 2 FULL_AUTO: 上电自跑, 跑完停车 ── */
 #elif CAR_MODE == 2
-    if (!g_wp_active) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0.0f; return; }
     wp_planner_step();
 
 /* ── MODE 3 REMOTE_WP: CMD 0x30 收航点 + CMD 0x31 启动 + CMD 0x32 停止复位 ── */
@@ -421,13 +418,17 @@ static void task_10hz_debug(void) {
         printf("#bias=%.4fdeg/s  mode=%u  q=%u\r\n",
                (double)(hal_imu_gyro_bias_z(g_imu) * 57.29578f),
                (u32)CAR_MODE, wp_count());
-        printf("t[s],car_x[m],car_y[m],car_th[deg],vst_x[m],vst_y[m],vst_th[deg]\r\n");
+        printf("t[s],vst_x[m],vst_y[m],car_x[m],car_y[m],vst_th[deg],car_th[deg],servo[rad],thd_model[rad/s],thd_imu[rad/s]\r\n");
         hdr = false;
     }
-    printf("%.3f,%.3f,%.3f,%.1f,%.3f,%.3f,%.1f\r\n",
+    printf("%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.3f,%.3f,%.3f\r\n",
            (f32)g_ms * 0.001f,
-           (double)g_car.x, (double)g_car.y, (double)(g_car.theta * 57.29578f),
-           (double)g_vst.x, (double)g_vst.y, (double)(g_vst.theta * 57.29578f));
+           (double)g_vst.x, (double)g_vst.y,
+           (double)g_car.x, (double)g_car.y,
+           (double)(g_vst.theta * 57.29578f), (double)(g_car.theta * 57.29578f),
+           (double)g_cmd.servo_delta,
+           (double)bicycle_curvature(g_car.v, g_cmd.servo_delta),
+           (double)g_imu_data.gyro[2]);
 }
 
 static void task_1hz_heartbeat(void) {
@@ -437,6 +438,6 @@ static void task_1hz_heartbeat(void) {
 Task tasks[TASK_NUM] = {
     {task_20hz_planner,   50,   1, 0},
     {task_20hz_report,    50,   1, 0},   /* planner 之后立刻上报 */
-    {task_10hz_debug,    100,   1, 0},
+    {task_10hz_debug,     20,   1, 0},   /* 50Hz */
     {task_1hz_heartbeat, 1000,  1, 0},
 };

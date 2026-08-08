@@ -1,0 +1,210 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[UTF8]{ctex}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\geometry{margin=2.5cm}
+
+\title{小车控制器架构设计思路}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{三层架构: NN $\to$ 虚拟车 $\to$ 跟踪}
+
+\subsection{为什么不能 NN 直接输出舵机/油门}
+
+端到端控制的根本问题: \textbf{NN 的 20Hz 输出是阶梯状的}。
+
+\begin{center}
+\begin{tabular}{c|c|c}
+\toprule
+& NN 直接输出 & NN $\to$ vst $\to$ 跟踪 \\
+\midrule
+控制量 & 舵角、油门 (位置量) & 加速度、转向速率 (高阶量) \\
+NN 输出 & 20Hz 跳变 & 20Hz 跳变 \\
+执行器指令 & 20Hz 跳变 & \textbf{200Hz 平滑} \\
+路径连续性 & 阶梯状 & 连续 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+如果 NN 直接输出舵角，20Hz 的零阶保持意味着每 50ms 舵机突然跳到新位置。舵机有能力 200Hz 平滑过渡，但 NN 不给它这个机会。
+
+\subsection{解决方案: NN 输出高阶控制量}
+
+NN 不输出位置 ($\delta$, $v$)，而是输出导数 ($\omega$, $a$)：
+
+\begin{equation}
+\begin{bmatrix} \omega \\ a \end{bmatrix}_{\text{20Hz}} = \text{NN}(v, \delta, \mathbf{g}_1, \mathbf{g}_2, \mathbf{g}_3)
+\end{equation}
+
+虚拟车在 200Hz 下积分:
+\begin{align}
+\delta_{\text{vst}}(t) &= \int \omega_{\text{NN}} \,dt \\
+v_{\text{vst}}(t)     &= \int a_{\text{NN}} \,dt \\
+\theta_{\text{vst}}(t) &= \int \frac{v_{\text{vst}}}{L}\tan\delta_{\text{vst}} \,dt \\
+x_{\text{vst}}(t)     &= \int v_{\text{vst}}\cos\theta_{\text{vst}} \,dt \\
+y_{\text{vst}}(t)     &= \int v_{\text{vst}}\sin\theta_{\text{vst}} \,dt
+\end{align}
+
+\textbf{NN 的 20Hz 阶梯被积分器平滑成 200Hz 的连续轨迹。} 这就是选择高阶控制量的核心原因。
+
+\subsection{为什么需要虚拟车}
+
+虚拟车的三个角色:
+
+\begin{enumerate}
+\item \textbf{平滑器}: 把 NN 的阶梯输出积分成连续路径
+\item \textbf{参考生成器}: 产生 $(x,y,\theta,v,\delta)_{\text{vst}}$ 五个参考状态
+\item \textbf{误差坐标系}: 在 vst 局部坐标系下投影误差，解耦纵向/横向
+\end{enumerate}
+
+没有虚拟车的替代方案:
+\begin{itemize}
+\item NN 直接输出轨迹点 $\to$ 需要二次插值 $\to$ 增加延迟和复杂度
+\item NN 输出高阶控制量直接给执行器 $\to$ 无反馈修正，开环
+\end{itemize}
+
+虚拟车是最小化的中间层——只做运动学积分，不引入额外参数。
+
+\section{前馈 + 反馈}
+
+\subsection{分工}
+
+\begin{center}
+\begin{tabular}{c|c|c}
+\toprule
+& 前馈 ($\omega_{\text{ff}}$, $a_{\text{ff}}$) & 反馈 (LQR, LADRC) \\
+\midrule
+来源 & NN 输出 & 传感器误差 \\
+作用 & 预期轨迹跟踪 & 扰动抑制 \\
+延迟 & 0 (零阶保持) & 5ms (传感器 + 计算) \\
+频带 & 低频 (0--20Hz) & 中高频 (0--100Hz) \\
+失效时 & 开环跑偏 & 仍能稳定 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+前馈承担 80\% 的控制力——NN 根据航点规划了全局最优路径，前馈就是这条路径的执行指令。反馈只修正剩余的 $\sim$5--10cm 误差。
+
+\subsection{为什么不全用反馈}
+
+纯反馈 (如纯 LQR 跟踪航点) 的问题:
+\begin{itemize}
+\item 反馈只看当前误差，不知道前方弯道——入弯晚了才反应
+\item 增益必须覆盖最坏情况 (急弯 + 高速)，日常场景下过于激进
+\item 没有前馈的 "预判"，在 U 型弯等大曲率路段会明显滞后
+\end{itemize}
+
+\subsection{为什么不全用前馈}
+
+纯前馈 (NN 输出直接给执行器) 的问题:
+\begin{itemize}
+\item NN 只有 20Hz，高频扰动 (地面不平、小石子) 来不及响应
+\item 模型误差 (轮胎滑移、陀螺零偏) 会累积，无纠正机制
+\item 传感器数据不进回路，开环精度依赖模型精度
+\end{itemize}
+
+前馈 + 反馈本质上是 \textbf{低频规划 + 高频纠偏}。NN 负责 "往哪走"，LQR/LADRC 负责 "走准它"。
+
+\section{为什么用 200Hz 跟踪层}
+
+\begin{center}
+\begin{tabular}{c|c}
+\toprule
+频率 & 理由 \\
+\midrule
+20Hz  & NN 推理 ($\sim$10ms) + 通信 ($\sim$10ms) $\approx$ 20Hz 上限 \\
+200Hz & 舵机带宽 $\sim$200Hz，5ms 控制周期足够跟踪瞬态 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+跟踪层跑在 ISR 里，200Hz 不动摇。NN 跑在 main 线程，20Hz 够用。两层之间通过 `PlannerAction` 结构体零阶保持传递——NN 更新了就接新值，没更新就保持旧值。
+
+ZOH 的合理性: NN 输出的 $\omega$ 和 $a$ 是\textbf{导数}，ZOH 保持意味着虚拟车以恒定角速度和加速度运动——这是物理上自然的短时假设 (车辆不能在 50ms 内突变加速度)。
+
+\section{误差投影: 为什么用 vst 局部坐标系}
+
+\begin{equation}
+\begin{bmatrix} e_x \\ e_y \end{bmatrix} =
+\begin{bmatrix}
+\cos\theta_{\text{vst}} & \sin\theta_{\text{vst}} \\
+-\sin\theta_{\text{vst}} & \cos\theta_{\text{vst}}
+\end{bmatrix}
+\begin{bmatrix}
+x_{\text{vst}} - x_{\text{car}} \\
+y_{\text{vst}} - y_{\text{car}}
+\end{bmatrix}
+\end{equation}
+
+\begin{center}
+\begin{tabular}{c|c}
+\toprule
+世界坐标系误差 & vst 局部坐标系误差 \\
+\midrule
+$e_x$, $e_y$ 耦合 & $e_x$ = 纵向误差, $e_y$ = 横向误差, 解耦 \\
+转弯时 $e_x$ 和 $e_y$ 都大 & 转弯时参考坐标系跟着转, 误差自然分解 \\
+LQR 需要解耦模型 & LQR 模型假设纵向/横向独立 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{为什么用速度自适应 LQR}
+
+LQR 增益表在 11 个速度断点上离线求解，运行时间距查找 + 双线性插值:
+
+\begin{equation}
+\mathbf{K}(v) = \text{LQR}\big(\mathbf{A}(v), \mathbf{B}, \mathbf{Q}, \mathbf{R}\big)
+\end{equation}
+
+$\mathbf{A}$ 矩阵的 $(1,2)$ 元素是 $v$——速度变了，系统动态变了。固定增益 LQR 在低速过阻尼、高速欠阻尼。速度自适应增益在全速域保持一致的闭环特性。
+
+\section{为什么用 LADRC 而非 PID}
+
+纵向的三个主要扰动源:
+
+\begin{enumerate}
+\item 坡度: 上坡时有效加速度减少 $g\sin\phi$
+\item 摩擦: 地面材质变化 (瓷砖 vs 地毯)
+\item 电池电压: 电压跌落导致电机力矩下降
+\end{enumerate}
+
+PID 通过积分项逐步补偿，响应慢且容易积分饱和。LADRC 的 LESO 将\textbf{所有扰动汇总为单一量 $f$}，在观测器带宽 (15 rad/s, $\sim$40ms) 内实时估计并前馈补偿。
+
+降阶 LESO 的选择: 速度 $v$ 已被编码器精确测量，不必重复观测。仅观测扰动 $f$ 即可，降低观测器阶数、提高收敛速度。
+
+\section{总结: 架构全景}
+
+\[
+\begin{array}{c}
+\fbox{NN 规划器 (20Hz)} \\
+\downarrow \quad [\omega_{\text{ff}},\; a_{\text{ff}}] \\
+\fbox{虚拟车积分器 (200Hz)} \\
+\downarrow \quad [x,y,\theta,v,\delta]_{\text{vst}} \\
+\fbox{误差投影 (vst 坐标系)} \\
+\downarrow \quad [e_x, e_y, e_\theta, \dot{e}_\theta, e_\delta] \\
+\begin{array}{|c|c|}
+\hline
+\fbox{LQR 横向} & \fbox{LADRC 纵向} \\
+\text{6-term 增益插值} & \text{降阶 LESO + PD} \\
+\omega_{\text{cmd}} = \omega_{\text{ff}} + \mathbf{Kx} & u = (k_p e_x + \cdots - \hat{f})/b_0 \\
+\hline
+\end{array} \\
+\downarrow \quad [\delta_{\text{cmd}},\; u_L, u_R] \\
+\fbox{执行器 (舵机 + 电机)} \\
+\downarrow \\
+\fbox{真实车辆} \\
+\downarrow \quad [\text{IMU}, \text{编码器}] \\
+\uparrow \quad \text{反馈至误差投影}
+\end{array}
+\]
+
+\textbf{一句总结: NN 说往哪走 (前馈)，物理模型连续化路径 (虚拟车)，传感器说实际在哪 (反馈)，LQR/LADRC 弥合差距 (纠偏)。}
+
+\end{document}

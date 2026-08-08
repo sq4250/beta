@@ -1,0 +1,80 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[UTF8]{ctex}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+
+\title{为何 $\dot{e}_y$ 不能作为独立 LQR 状态}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{当前状态空间}
+
+状态 $\mathbf{x} = [e_y^{\text{int}}, e_y, e_\theta, \dot{e}_\theta, e_\delta]^\top$，共 5 个独立状态。
+
+\begin{equation}
+\mathbf{A} =
+\begin{bmatrix}
+0 & 1 & 0 & 0      & 0            \\
+0 & 0 & v & 0      & 0            \\
+0 & 0 & 0 & 1      & 0            \\
+0 & 0 & 0 & -w_o   & w_o v/L \\
+0 & 0 & 0 & 0      & 0
+\end{bmatrix}
+\end{equation}
+
+$e_\theta$ 通过 $\mathbf{A}_{1,2} = v$ 驱动 $\dot{e}_y$，两者是\textbf{代数关系}而非独立动态。
+
+\section{若将 $\dot{e}_y$ 加入状态}
+
+扩展状态 $\tilde{\mathbf{x}} = [e_y^{\text{int}}, e_y, \dot{e}_y, e_\theta, \dot{e}_\theta, e_\delta]^\top$ (6 维)。
+
+线性化下 $\dot{e}_y = v \cdot e_\theta$，新增状态不带来新信息——$\dot{e}_y$ 是 $e_\theta$ 的标量倍数:
+
+\begin{equation}
+\dot{e}_y = v \cdot e_\theta \quad\Rightarrow\quad \operatorname{rank}(\tilde{\mathbf{A}}) = 5 < 6
+\end{equation}
+
+\section{能控性秩亏损}
+
+构造 $\tilde{\mathbf{A}}$ (线性化，$\dot{e}_y = v e_\theta$):
+
+\begin{equation}
+\tilde{\mathbf{A}} =
+\begin{bmatrix}
+0 & 1 & 0   & 0 & 0      & 0    \\
+0 & 0 & 1   & 0 & 0      & 0    \\
+0 & 0 & 0   & 0 & v      & 0    \\
+0 & 0 & 0   & 0 & 1      & 0    \\
+0 & 0 & 0   & 0 & -w_o   & w_o v/L \\
+0 & 0 & 0   & 0 & 0      & 0
+\end{bmatrix}
+\end{equation}
+
+第三行: $\ddot{e}_y = v \cdot \ddot{e}_\theta$，是第五行的线性组合。第 2、3 列线性相关。
+
+能控性矩阵 $\mathcal{C} = [\mathbf{B}, \mathbf{A}\mathbf{B}, \dots, \mathbf{A}^5\mathbf{B}]$ 的秩 $<6$。Riccati 方程求解时 $\mathbf{P}$ 矩阵秩亏，$\mathbf{K}$ 非唯一——有无穷多等价解，对应同一个闭环系统。
+
+\section{本质原因}
+
+LQR 是\textbf{线性}控制器。在线性化模型里:
+
+\begin{equation}
+e_\theta \;\text{和}\; \dot{e}_y \;\text{是同一个物理量}
+\end{equation}
+
+把同一个信号送进两条线，LQR 无法区分它来自哪个"传感器"，只能解出一个总权重。这正是 $\alpha$ 分解做的事——先求出总权重 $K_{\text{eth}}^{\text{raw}}$，再\textbf{人为}拆成两路，利用 $\sin(e_\theta)$ 的非线性差异赋予不同瞬态行为。
+
+\begin{center}
+\fbox{$\alpha$ 分解 = LQR 做不到的事，用工程手段补上}
+\end{center}
+
+\section{一句话}
+
+\textbf{线性模型里 $\dot{e}_y$ 和 $e_\theta$ 是共线性的——增加状态不增加秩，Riccati 无唯一解。分解是在非线性实现层面补出这个自由度。}
+
+\end{document}

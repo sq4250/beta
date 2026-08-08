@@ -33,6 +33,8 @@ void longitudinal_step(f32 *thr_l, f32 *thr_r,
     f32 z_dot = -LONG_WO * (g_z + (LONG_WO - LONG_ALPHA) * v_meas + LONG_B0 * g_u_prev);
     g_z += z_dot * LONG_DT;
     g_f_hat = g_z + LONG_WO * v_meas;
+    if      (g_f_hat >  LONG_FHAT_MAX) { g_f_hat =  LONG_FHAT_MAX; g_z =  LONG_FHAT_MAX - LONG_WO * v_meas; }
+    else if (g_f_hat < -LONG_FHAT_MAX) { g_f_hat = -LONG_FHAT_MAX; g_z = -LONG_FHAT_MAX - LONG_WO * v_meas; }
 
     // ── PD 控制律 (v_meas 已滤波, 来自观测层) ──
     f32 u0 = LONG_KP * e_x + LONG_KD * (v_ref - v_meas) + a_ref + LONG_ALPHA * v_meas - g_f_hat;

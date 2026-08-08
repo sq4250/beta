@@ -18,7 +18,7 @@ void car_estimate_update(CarState *car, const ImuData *imu,
                         1.0f - 2.0f*(q[0]*q[0] + q[2]*q[2]));
         car->theta = wrap_pi(M_PI_F - yq);  /* 180°偏移 + 符号翻转, 纯四元数 */
     } else {
-        car->theta += imu->gyro[2] * ISR_DT;
+        car->theta = wrap_pi(car->theta + imu->gyro[2] * ISR_DT);
     }
 
     // ── 速度: EMA 低通滤波 ──

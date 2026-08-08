@@ -1,20 +1,38 @@
 """
 gen_lqr.py — LQR gain table generator for lqr_gains.h
 
-State-space model (error dynamics in vst frame, 5-state with ey integral):
-  [ey_int]   [ 0  1  0   0      0   ] [ey_int]   [ 0 ]
-  | ey    |   | 0  0  v   0      0   | | ey    |   | 0 |
-  | eth   | = | 0  0  0   1      0   | | eth   | + | 0 | * omega
-  | eth_d |   | 0  0  0  -wo  wo*v/L| | eth_d |   | 0 |
-  [ ed    ]   [ 0  0  0   0      0   ] [ ed    ]   [ 1 ]
+State-space model (error dynamics in vst frame, FLU: X+前 Y+左, 5-state + ey integral):
 
-Cost:  J = q_ey_int*ey_int^2 + q_ey*ey^2 + q_eth*eth^2 + q_ethd*eth_d^2 + r*omega^2
+  States: x = [ey_int, ey, eth, eth_d, ed]^T
+    ey_int = ∫ey·dt             (VST 系横向误差积分)
+    ey     = lateral error       (VST 系, e_y > 0 → VST 在真车左侧)
+    eth    = vst_theta − car_theta  (航向误差 [rad], 帧无关标量)
+    eth_d  = ω_vst − ω_car      (模型 yaw rate − 实测 gyro_z)
+    ed     = vst_delta − car_delta  (前轮转角误差 [rad])
 
-5 Riccati gains -> 5 controller gains:
-  K[0]=Ki, K[1]=K_ey, K[2]=K_eth, K[3]=K_ethd, K[4]=K_ed
+  Dynamics:
+    d(ey)/dt ≈ v·eth       (小角度近似 sin(eth)≈eth, v = 车速)
+    d(eth)/dt = eth_d       (定义)
+    d(eth_d)/dt = −wo·eth_d + wo·v/L·ed   (car yaw rate 一阶滞后模型)
+    d(ed)/dt = ω_model      (ω_model = −d(car_delta)/dt, vst_delta 缓变≈0)
 
-Usage:
-  python gen_lqr.py --q-ey-int 0.05 --q-ey 25000 --q-eth 3000 --q-ethd 35 -r 1 --wo 15 ...
+  SIGN CONVENTION (关键):
+    LQR 标准解: u = −Kx = −R⁻¹B^TPx
+    模型 ω_model = d(ed)/dt = −d(car_delta)/dt  (正 ω_model → car delta 减小)
+    代码 omega_fb = +Kx, cmd->delta = car->delta + omega_fb·dt
+    → omega_fb = −ω_model, 两个翻转抵消: omega_fb = −(−Kx) = +Kx ✓
+
+  Control input: omega [rad/s] — steering rate (模型约定, 见上)
+
+  5 Riccati gains -> 5 controller gains:
+    K[0]=Ki, K[1]=K_ey, K[2]=K_eth, K[3]=K_ethd, K[4]=K_ed
+
+  Actual deployed params:
+    python gen_lqr.py --q-ey-int 0.05 --q-ey 25000 --q-eth 3000 --q-ethd 35 \\
+                      -r 1 --wo 15 --v-min 0.1 --v-max 5.0 -N 11
+
+  Usage:
+    python gen_lqr.py --q-ey-int 0.05 --q-ey 25000 --q-eth 3000 --q-ethd 35 -r 1 --wo 15 ...
 """
 
 import argparse
@@ -22,10 +40,11 @@ from pathlib import Path
 import numpy as np
 from scipy.linalg import solve_continuous_are
 
+# Deployed defaults (match core/lqr_gains.h)
 DEFAULTS = {
-    "q_ey_int": 0.05, "q_ey": 1.0, "q_eth": 0.5, "q_ethd": 0.30,
-    "r": 0.001, "wo": 30.0, "wheelbase": 0.15,
-    "v_min": 0.1, "v_max": 4.0, "n_speeds": 9,
+    "q_ey_int": 0.05, "q_ey": 25000.0, "q_eth": 3000.0, "q_ethd": 35.0,
+    "r": 1.0, "wo": 15.0, "wheelbase": 0.15,
+    "v_min": 0.1, "v_max": 5.0, "n_speeds": 11,
     "integral": True,
 }
 

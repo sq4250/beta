@@ -1,0 +1,83 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[UTF8]{ctex}
+\usepackage{amsmath}
+\usepackage{geometry}
+\usepackage{booktabs}
+\geometry{margin=2.5cm}
+
+\title{小车速度一阶惯性近似}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+忽略电感瞬态 ($L/R \ll$ 机械时间常数)，仅需两个方程。
+
+\paragraph{变量表}
+
+\begin{center}
+\begin{tabular}{c|l|l}
+\toprule
+符号 & 含义 & 单位 \\
+\midrule
+$V$   & 电机端电压 (控制输入) & V \\
+$i$   & 电机电流 & A \\
+$R$   & 电枢电阻 & $\Omega$ \\
+$K_e$ & 反电动势常数 & V/(rad/s) \\
+$K_t$ & 转矩常数 ($=K_e$, 理想电机) & N·m/A \\
+$n$   & 减速比 & --- \\
+$r$   & 车轮半径 & m \\
+$m$   & 整车质量 & kg \\
+$v$   & 车速 & m/s \\
+$b$   & 总阻尼 (摩擦 + 传动损耗) & N/(m/s) \\
+\midrule
+$\alpha$ & 等效阻尼系数 = $(n^2K_eK_t/r^2R + b)/m$ & s$^{-1}$ \\
+$b_0$   & 等效控制增益 = $nK_t/(mrR)\cdot V_{\max}$ & m/s$^2$ \\
+$u$     & 归一化油门 = $V/V_{\max}$ & --- \\
+$f$     & 总扰动 (坡度、电池跌落、建模误差) & m/s$^2$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{推导}
+
+\begin{equation}
+V = R \cdot i + \frac{nK_e}{r} \cdot v \quad\text{(电压平衡: 电阻压降 $+$ 反电动势)}
+\end{equation}
+
+\begin{equation}
+\Rightarrow \quad i = \frac{V - (nK_e/r) \cdot v}{R} \quad\text{(电流由电压与反电动势之差决定)}
+\end{equation}
+
+\begin{equation}
+m \cdot \dot{v} = \frac{nK_t}{r} \cdot i - b \cdot v \quad\text{(牛顿: 车轮驱动力 $-$ 阻力)}
+\end{equation}
+
+代入消去 $i$:
+
+\begin{equation}
+\dot{v} = -\frac{n^2K_eK_t/r^2R + b}{m} \cdot v + \frac{nK_t}{mrR} \cdot V
+\end{equation}
+
+整理为标准一阶形式:
+
+\begin{equation}
+\boxed{\dot{v} = -\alpha \cdot v + b_0 \cdot u}
+\end{equation}
+
+传递函数: $\displaystyle \frac{v(s)}{u(s)} = \frac{b_0}{s + \alpha}$，稳态 $v_{ss} = (b_0/\alpha) \cdot u$。
+
+加入扰动后即 LADRC 所用模型:
+\begin{equation}
+\boxed{\dot{v} = -\alpha \cdot v + b_0 \cdot u + f}
+\end{equation}
+
+$f$ 将所有非理想因素合并为单一等效量，由 LESO 实时估计并前馈补偿。
+
+\paragraph{参数获取}
+
+$\alpha, b_0$ 不依赖精确测量 $m, K_e, K_t, R$。阶跃响应上升沿形状可直接拟合得到。
+
+\end{document}

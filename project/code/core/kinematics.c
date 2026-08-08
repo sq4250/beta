@@ -1,29 +1,45 @@
 /**
- * kinematics.c — 自行车模型 + 车体变换实现
+ * kinematics.c — FullSim 摩擦圆物理模拟
+ *
+ * 模型无关: 所有模型共用同一套物理.
+ * 输入编码逻辑在各自的 nn_model_*.c 中.
  */
-
 #include "kinematics.h"
 #include "utils.h"
+#include <math.h>
 
-void mcu_kinematics_step(CarState *s, f32 a_long, f32 omega) {
-    s->v     += clamp(a_long, -A_BRAKE_MAX, A_LONG_MAX) * CTRL_DT;
-    s->delta += clamp(omega, -OMEGA_DELTA_MAX, OMEGA_DELTA_MAX) * CTRL_DT;
+void mcu_kinematics_step(CarState *s, f32 a_raw, f32 w_raw,
+                         f32 *a_eff, f32 *w_eff) {
+    /* ① 动作限幅 */
+    f32 an = clamp(a_raw, -A_BRAKE_MAX, A_LONG_MAX);
+    f32 om = clamp(w_raw, -OMEGA_DELTA_MAX, OMEGA_DELTA_MAX);
 
-    s->v     = clamp(s->v,    0,       V_MAX);  /* 不许后退 */
-    s->delta = clamp(s->delta, -DELTA_MAX,  DELTA_MAX);
+    /* ② 名义速度 → 裁剪 → 反算真实加速度 */
+    f32 vn = s->v + an * CTRL_DT;
+    vn = clamp(vn, 0.0f, V_MAX);
+    f32 al = (vn - s->v) / CTRL_DT;   /* 无需分支: 未裁剪时 al==an */
 
-    s->theta += bicycle_curvature(s->v, s->delta) * CTRL_DT;
+    /* ③ 摩擦圆/椭圆: 根据加速度方向选纵向半轴 */
+    f32 semi = (al >= 0.0f) ? A_LONG_MAX : A_BRAKE_MAX;
+    f32 r   = clamp(al / (semi + 1e-8f), -1.0f, 1.0f);
+    f32 alm = A_LAT_MAX * sqrtf(1.0f - r*r + 1e-12f);
+
+    /* ④ 转角限幅 → 反算真实 omega */
+    f32 vs   = fmaxf(vn, 0.01f);
+    f32 dl   = atanf(alm * WHEELBASE / (vs * vs));
+    f32 dmax = fminf(DELTA_MAX, dl);
+    f32 dn   = s->delta + om * CTRL_DT;
+    dn = clamp(dn, -dmax, dmax);
+    om = (dn - s->delta) / CTRL_DT;   /* 无需分支: 未裁剪时 om==w_raw */
+
+    /* ⑤ 位置/航向更新 (旧速度, 旧航向) */
     s->x     += s->v * cosf(s->theta) * CTRL_DT;
     s->y     += s->v * sinf(s->theta) * CTRL_DT;
-}
+    s->theta += s->v * tanf(dn) / WHEELBASE * CTRL_DT;
 
-void world_to_body_8d(f32 out[8], const CarState *s, const Waypoint *g1, const Waypoint *g2, const Waypoint *g3) {
-    f32 ct = cosf(s->theta), st = sinf(s->theta);
-    f32 dx1 = g1->x - s->x, dy1 = g1->y - s->y;
-    f32 dx2 = g2->x - s->x, dy2 = g2->y - s->y;
-    f32 dx3 = g3->x - s->x, dy3 = g3->y - s->y;
-    out[0] = s->v;  out[1] = s->delta;
-    out[2] = dx1*ct + dy1*st;  out[3] = -dx1*st + dy1*ct;
-    out[4] = dx2*ct + dy2*st;  out[5] = -dx2*st + dy2*ct;
-    out[6] = dx3*ct + dy3*st;  out[7] = -dx3*st + dy3*ct;
+    /* ⑥ 状态写入 + 有效动作输出 */
+    s->v = vn;
+    s->delta = dn;
+    *a_eff = al;
+    *w_eff = om;
 }

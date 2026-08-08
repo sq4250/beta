@@ -1,36 +1,17 @@
 /**
  * config.h — 可调参数 (上车标定/调参修改此文件)
  */
-
 #ifndef CONFIG_H
 #define CONFIG_H
 
 #include "common.h"
 
-/* ── 切模型: 改 NN_MODEL_VERSION ── */
-#define NN_VER_1P5         15
-#define NN_VER_2P5         25
-#define NN_VER_20          20
-#define NN_VER_30          30
-#define NN_VER_2A5         250
-#define NN_VER_KAMM_V1     310
-#define NN_VER_SYM4        320
-#define NN_MODEL_VERSION   NN_VER_SYM4   /* ← 对称摩擦圆 a=4.0 a_lat=4.0 */
+/* ── 模型 ── */
+#define NN_VER_GP_SMALL    400
+#define NN_MODEL_VERSION   NN_VER_GP_SMALL   /* GP-Small 3.7K polar + FullSim */
 
-#if   NN_MODEL_VERSION == NN_VER_1P5
-  #include "core/nn_model_v1p5.h"
-#elif NN_MODEL_VERSION == NN_VER_2P5
-  #include "core/nn_model_v2p5.h"
-#elif NN_MODEL_VERSION == NN_VER_20
-  #include "core/nn_model_v20.h"
-#elif NN_MODEL_VERSION == NN_VER_30
-  #include "core/nn_model_v30.h"
-#elif NN_MODEL_VERSION == NN_VER_2A5
-  #include "core/nn_model_2a5.h"
-#elif NN_MODEL_VERSION == NN_VER_KAMM_V1
-  #include "core/nn_model_kamm_v1.h"
-#elif NN_MODEL_VERSION == NN_VER_SYM4
-  #include "core/nn_model_sym4.h"
+#if   NN_MODEL_VERSION == NN_VER_GP_SMALL
+  #include "core/nn_model_gp_small.h"
 #endif
 
 //===================================================车体几何===================================================
@@ -40,79 +21,70 @@
 //===================================================车体几何===================================================
 
 //===================================================编码器标定===================================================
-#define ENCODER_SCALE     8.725e-5f  // 编码器每线位移 [m/count], 速度 = counts*SCALE*TRACKER_FREQ
+#define ENCODER_SCALE     8.725e-5f  // 编码器每线位移 [m/count]
 //===================================================编码器标定===================================================
 
 //===================================================转向===================================================
-#define INV_STEERING_RATIO  0.5f       // 前轮→舵机: srad = delta * INV (舵机1°↔前轮2°)
+#define INV_STEERING_RATIO  0.5f     // 前轮→舵机: srad = delta * INV
 //===================================================转向===================================================
 
 //===================================================IMU 标定===================================================
-#define IMU_BIAS_TOTAL     1000       // 零偏采样总数 (1s)
-#define IMU_BIAS_FAST       500       // 前N样本递推平均
-#define IMU_BIAS_ALPHA      0.005f    // 后续 EMA 系数
-#define IMU_ACC_NORM_MIN    0.9f      // 运动拒绝: 加速度下限 [g]
-#define IMU_ACC_NORM_MAX    1.1f      // 运动拒绝: 加速度上限 [g]
-#define IMU_MOTION_THR      500       // 运动拒绝: 陀螺阈值 [raw]
-#define IMU_YAW_ALPHA       0.95f     // 互补滤波: 陀螺权重 (四元数权重=1-ALPHA)
+#define IMU_BIAS_TOTAL     1000
+#define IMU_BIAS_FAST       500
+#define IMU_BIAS_ALPHA      0.005f
+#define IMU_ACC_NORM_MIN    0.9f
+#define IMU_ACC_NORM_MAX    1.1f
+#define IMU_MOTION_THR      500
+#define IMU_YAW_ALPHA       0.95f
 //===================================================IMU 标定===================================================
 
 //===================================================启动延迟===================================================
-#define STARTUP_DELAY_MS   2000       // 启动延迟 [ms], IMU 零偏稳定 + 传感器自检
+#define STARTUP_DELAY_MS   2000
 //===================================================启动延迟===================================================
 
 //===================================================控制器频率===================================================
-// ISR 1kHz (硬件定时器), 跟踪=编码器=200Hz (1k/5), 规划=20Hz
-#define ISR_FREQ           1000       // ISR 频率 [Hz] (硬件)
-#define ISR_DT             0.001f     // = 1/ISR_FREQ
+#define ISR_FREQ           1000       // ISR 频率 [Hz]
+#define ISR_DT             0.001f
 #define TRACKER_FREQ       200        // 跟踪层频率 [Hz]
-#define TRACKER_DIV        5          // = ISR_FREQ / TRACKER_FREQ
-#define CTRL_DT            0.005f     // = 1/TRACKER_FREQ
+#define TRACKER_DIV        5
+#define CTRL_DT            0.005f     // 跟踪周期 [s]
 //===================================================控制器频率===================================================
 
 //===================================================航点===================================================
 #define TOL_XY             0.10f      // 到达容差 [m]
-#define MAX_WAYPOINTS      16         // 最大航点数
-
-/* ── 航点队列 ── */
-#define WP_QUEUE_SIZE      16         // 环形缓冲槽数 (须为 2 的幂)
+#define MAX_WAYPOINTS      16
+#define WP_QUEUE_SIZE      16
 
 /* ── 模式: 1=DIRECT  2=FULL_AUTO  3=REMOTE_WP  4=AUTO_START ── */
-#define CAR_MODE           2          // ← 改这里切模式
-/*
- * 1 DIRECT     飞机 CMD 0x10 直驱加速度, 不跑 NN
- * 2 FULL_AUTO  本地航点 TSP 排序 → wp_queue → 上电自跑
- * 3 REMOTE_WP  飞机 CMD 0x30 下发航点 → wp_queue → CMD 0x31 启动
- * 4 AUTO_START 本地航点 TSP 排序 → wp_queue → CMD 0x31 启动
- */
+#define CAR_MODE           2
 
-/* ── 本地航点 (MODE 2 用, 世界 NWU [m]) ── */
 #define CAR_START_X        0.0f
 #define CAR_START_Y        0.0f
 #define LOCAL_WP_COUNT     6
 //===================================================航点===================================================
 
+//===================================================物理约束===================================================
+/* A_LONG_MAX / A_BRAKE_MAX / A_LAT_MAX / V_MAX / DELTA_MAX / OMEGA_DELTA_MAX
+   定义在 nn_model_gp_small.h — 换模型时物理约束自动跟随 */
+#define SERVO_DELTA_MAX    0.53f      // 舵机物理限幅 [rad] (≈30.4°, >NN训练的0.46)
+//===================================================物理约束===================================================
+
 //===================================================LQR===================================================
-#define LQR_V_MIN          0.1f       // 查表最小速度 [m/s]
+#define LQR_V_MIN          0.1f
 //===================================================LQR===================================================
 
 //===================================================纵向 LADRC===================================================
-#define LONG_B0            11.0f      // 控制增益 (v_ss=b0/alpha*thr≈22.5*thr)
-#define LONG_ALPHA         0.5f       // 模型阻尼 (b0/alpha=22.5, 实测匹配)
-#define LONG_WO            4.0f      // LESO 观测带宽 [rad/s] (~2.4Hz)
-#define LONG_KP            1.0f      // 位置误差 P (ωc=6.8rad/s)
-#define LONG_KD            2.0f      // 速度误差 D (ζ=1.0, 临界阻尼)
-#define LONG_DT            CTRL_DT    // 控制周期
+#define LONG_B0            15.0f
+#define LONG_ALPHA         0.5f
+#define LONG_WO            8.0f
+#define LONG_KP            4.0f
+#define LONG_KD            4.0f
+#define LONG_FHAT_MAX      2.0f      // f̂ 钳位, 防打滑扰动溢出
+#define LONG_DT            CTRL_DT
 //===================================================纵向 LADRC===================================================
-
-//===================================================4-clamp===================================================
-/* A_LONG_MAX / A_BRAKE_MAX / V_MAX 已移至各模型头文件 */
-#define OMEGA_DELTA_MAX    20.0f      // 前轮转角角速度上限 [rad/s]
-#define DELTA_MAX           0.4636f   // 前轮转角上限 [rad] (≈26.5°)
-//===================================================4-clamp===================================================
 
 //===================================================速度滤波===================================================
-#define SPEED_FILT_ALPHA    0.1f       // 编码器速度 EMA 系数 (1kHz, ≈10Hz 截止)
+#define SPEED_FILT_ALPHA    0.03f      // EMA τ≈33ms, fc≈5Hz (>LESO 1.3Hz×4)
 //===================================================速度滤波===================================================
 
 #endif
