@@ -33,7 +33,7 @@ def load(path):
             try: raw.append([float(x) for x in p[:7]])
             except ValueError: continue
     a = np.array(raw)
-    return a[:,0], a[:,1], a[:,2], a[:,4], a[:,5], a[:,3], a[:,6]  # t,cx,cy,vx,vy,cth,vth
+    return a[:,0], a[:,3], a[:,4], a[:,1], a[:,2], a[:,6], a[:,5]  # t,cx,cy,vx,vy,cth,vth
 
 def main():
     args = {'fps': 30, 'speed': 1.0}
@@ -103,18 +103,22 @@ def main():
         ax.tick_params(colors='#898781')
 
         fname = f'{tmpdir}/frame_{frame_no:06d}.png'
-        fig.savefig(fname, dpi=100, facecolor=BG, bbox_inches='tight')
+        fig.savefig(fname, dpi=100, facecolor=BG, bbox_inches='tight', pad_inches=0.1)
         plt.close(fig)
         frame_no += 1
         if (fi+1) % 30 == 0:
             print(f'  frame {fi+1}/{total_frames}: t={t[i]:.1f}s')
 
     print(f'  {frame_no} frames, encoding...')
-    subprocess.run(['ffmpeg', '-y', '-framerate', str(args['fps']),
-                    '-start_number', '0',
-                    '-i', f'{tmpdir}/frame_%06d.png',
-                    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '23',
-                    str(OUT)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    cmd = (f'ffmpeg -y -framerate {args["fps"]} '
+           f'-i "{tmpdir}/frame_%06d.png" '
+           f'-vf "pad=ceil(iw/2)*2:ceil(ih/2)*2:0:0:color=#1a1a19" '
+           f'-c:v libx264 -pix_fmt yuv420p -crf 23 '
+           f'"{OUT}"')
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f'  ffmpeg error:\n{result.stderr}')
+        raise RuntimeError(f'ffmpeg exited with {result.returncode}')
     # cleanup
     for i in range(frame_no):
         os.unlink(f'{tmpdir}/frame_{i:06d}.png')

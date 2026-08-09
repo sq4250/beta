@@ -1,5 +1,5 @@
 /**
- * lateral.h — LQR 横向跟踪器 (200Hz), 5-term with ey integral
+ * lateral.h — LQR 横向跟踪器 (200Hz), 4-term simple (no ed, no wo)
  */
 #ifndef LATERAL_H
 #define LATERAL_H

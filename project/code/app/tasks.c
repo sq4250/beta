@@ -65,7 +65,8 @@ static Encoder       g_enc;
 static ImuHandle     g_imu;
 static bool          g_ready;
 static volatile u32  g_ms;
-static f32           g_ey, g_ex;   /* 跟踪误差, ISR 写入 / debug 读取 */
+static f32           g_ey, g_ex;          /* 跟踪误差, ISR 写入 / debug 读取 */
+static f32           g_w_eff, g_a_eff;    /* 前馈量, ISR 写入 / debug 读取 */
 static bool          g_wp_active;  /* 航点执行进行中 */
 static Waypoint       g_vst_prev;   /* 上周期 vst 位置 (线段碰撞检测起点) */
 #if CAR_MODE == 3
@@ -130,14 +131,12 @@ static void ref_frame_error(f32 *ex, f32 *ey, const CarState *rs, const CarState
     *ey = -dx * st + dy * ct;                   /* RotZ(-theta) row 1 */
 }
 
-/* ═══════════════════════════════════════════════════════════
- *  跟踪层 (200Hz ISR): 虚拟车推进 + LQR + LADRC → 执行器
- * ═══════════════════════════════════════════════════════════ */
 static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst,
                                 const CarState *car,
                                 const PlannerAction *plan, f32 gyro_z) {
     f32 a_eff, w_eff;
     mcu_kinematics_step(vst, plan->a, plan->omega, &a_eff, &w_eff);
+    g_a_eff = a_eff; g_w_eff = w_eff;
 
     f32 e_x, e_y;
     ref_frame_error(&e_x, &e_y, car, vst);
@@ -418,17 +417,22 @@ static void task_10hz_debug(void) {
         printf("#bias=%.4fdeg/s  mode=%u  q=%u\r\n",
                (double)(hal_imu_gyro_bias_z(g_imu) * 57.29578f),
                (u32)CAR_MODE, wp_count());
-        printf("t[s],vst_x[m],vst_y[m],car_x[m],car_y[m],vst_th[deg],car_th[deg],servo[rad],thd_model[rad/s],thd_imu[rad/s]\r\n");
+        printf("t[s],vst_x[m],vst_y[m],car_x[m],car_y[m],vst_th[deg],car_th[deg],servo[rad],vst_delta[rad],vst_yaw[rad/s],car_yaw[rad/s],gyro_z[rad/s],w_ff[rad/s],a_ff[m/s2],vst_v[m/s],car_v[m/s],f_hat[m/s2]\r\n");
         hdr = false;
     }
-    printf("%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.3f,%.3f,%.3f\r\n",
+    f32 vst_yaw  = bicycle_curvature(g_vst.v, g_vst.delta);
+    f32 car_yaw  = bicycle_curvature(g_car.v, g_cmd.servo_delta);
+    f32 gyro_z   = g_imu_data.gyro[2];
+    printf("%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\r\n",
            (f32)g_ms * 0.001f,
            (double)g_vst.x, (double)g_vst.y,
            (double)g_car.x, (double)g_car.y,
            (double)(g_vst.theta * 57.29578f), (double)(g_car.theta * 57.29578f),
-           (double)g_cmd.servo_delta,
-           (double)bicycle_curvature(g_car.v, g_cmd.servo_delta),
-           (double)g_imu_data.gyro[2]);
+           (double)g_cmd.servo_delta, (double)g_vst.delta,
+           (double)vst_yaw, (double)car_yaw, (double)gyro_z,
+           (double)g_w_eff, (double)g_a_eff,
+           (double)g_vst.v, (double)g_car.v,
+           (double)longitudinal_f_hat());
 }
 
 static void task_1hz_heartbeat(void) {

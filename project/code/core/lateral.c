@@ -1,15 +1,17 @@
 /**
- * lateral.c — LQR 横向跟踪器 (200Hz), 5-term with ey integral
+ * lateral.c — LQR 横向跟踪器 (200Hz), 4-term simple with ey integral
  *
- * 5 gains: [Ki, K_ey, K_eth, K_ethd, K_ed]
- *   ey_int = ∫ ey·dt  (anti-windup clamped)
- *   omega_fb = Ki·ey_int + K_ey·ey + K_eth·eth + K_ethd·eth_d + K_ed·ed
+ * 4-state direct model: [ey_int, ey, eth, eth_d]
+ *   ω_cmd → car yaw accel via v/L  (no ed, no wo yaw-rate lag)
+ *
+ * 4 gains: [Ki, K_ey, K_eth, K_ethd]
+ *   omega_fb = Ki·ey_int + K_ey·ey + K_eth·eth + K_ethd·eth_d
  */
 #include "lateral.h"
 #include "lqr_gains.h"
 #include "utils.h"
 
-#define N_GAINS 5
+#define N_GAINS 4
 #define EY_INT_MAX  0.5f    /* anti-windup clamp [m·s] */
 
 static f32 g_ey_int;
@@ -43,9 +45,8 @@ static void lqr_lookup(f32 g[N_GAINS], f32 v) {
 
 f32 lateral_step(const CarState *rs, const CarState *vst, f32 omega_ff, f32 gyro_z, f32 ey
     ) {
-    f32 eth  = wrap_pi(vst->theta - rs->theta);
+    f32 eth   = wrap_pi(vst->theta - rs->theta);
     f32 eth_d = bicycle_curvature(vst->v, vst->delta) - gyro_z;
-    f32 ed    = vst->delta - rs->delta;
 
     /* ey integral with anti-windup */
     g_ey_int += ey * CTRL_DT;
@@ -53,6 +54,6 @@ f32 lateral_step(const CarState *rs, const CarState *vst, f32 omega_ff, f32 gyro
     else if (g_ey_int < -EY_INT_MAX) g_ey_int = -EY_INT_MAX;
 
     f32 g[N_GAINS]; lqr_lookup(g, vst->v);
-    f32 omega_fb = g[0]*g_ey_int + g[1]*ey + g[2]*eth + g[3]*eth_d + g[4]*ed;
+    f32 omega_fb = g[0]*g_ey_int + g[1]*ey + g[2]*eth + g[3]*eth_d;
     return omega_ff + omega_fb;
 }
