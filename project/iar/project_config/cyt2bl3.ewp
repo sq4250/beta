@@ -3161,34 +3161,10 @@
                 <name>$PROJ_DIR$\..\..\code\core\lqr_gains.h</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_v1p5.c</name>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_gp_small.c</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_v1p5.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_v20.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_v20.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_v2p5.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_v2p5.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_v30.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_v30.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_2a5.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_2a5.h</name>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_gp_small.h</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\code\core\planner.c</name>

@@ -3,7 +3,6 @@
 #include "tasks.h"
 #include "car_comm.h"
 #include "core/planner.h"
-#include "core/kinematics.h"
 #include "core/lateral.h"
 #include "core/tsp.h"
 #include "utils.h"
@@ -127,7 +126,7 @@ static void planner_step(void) {
             wp_load_unvisited();
             gn = wp_take_n(g, 3);
         }
-        if (!gn) { g_plan.a = 0; g_plan.omega = 0; return; }
+        if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
     }
 
     if (check_hit_substep(g_car_prev.x, g_car_prev.y, g_car.x, g_car.y, g[0].x, g[0].y, TOL_XY)) {
@@ -142,11 +141,13 @@ static void planner_step(void) {
                 gn = wp_take_n(g, 3);
             }
         }
-        if (!gn) { g_plan.a = 0; g_plan.omega = 0; return; }
+        if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
     }
 
     for (u8 i = gn; i < 3; i++) g[i] = g[gn - 1];
-    planner_forward(&g_plan, &g_vst, &g[0], &g[1], &g[2]);
+    f32 v2 = (gn > 1) ? 1.0f : 0.0f;
+    f32 v3 = (gn > 2) ? 1.0f : 0.0f;
+    planner_forward(&g_plan, &g_vst, &g[0], &g[1], &g[2], v2, v3);
     g_car_prev = wp_of(&g_car);
 }
 

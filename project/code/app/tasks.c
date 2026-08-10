@@ -42,23 +42,22 @@ static void frame_error(f32 *ex, f32 *ey, const car_state_t *r, const car_state_
 
 static void tracking(actuator_cmd_t *cmd, car_state_t *vst, const car_state_t *car,
                      const planner_action_t *plan, f32 gyro_z) {
-    mcu_kinematics_step(vst, plan->a, plan->omega);
+    f32 a_eff, w_eff;
+    mcu_kinematics_step(vst, plan->a, plan->omega, &a_eff, &w_eff);
 
     f32 ex, ey;
     frame_error(&ex, &ey, car, vst);
     g_ex = ex; g_ey = ey;
 
-    f32 omg = lateral_step(car, vst, plan->omega, gyro_z, ey);
-    cmd->servo_delta = clamp(car->delta + omg * CTRL_DT, -DELTA_MAX, DELTA_MAX);
+    /* LQR 横向: δ = δ_vst + Δδ_fb (前馈+反馈, 无积分器) */
+    f32 delta_fb = lateral_step(car, vst, gyro_z, ey);
+    cmd->servo_delta = clamp(vst->delta + delta_fb, -SERVO_DELTA_MAX, SERVO_DELTA_MAX);
 
-    f32 ar = plan->a;
-    if (vst->v >= V_MAX && ar > 0) ar = 0;
-    if (vst->v <= 0 && ar < 0) ar = 0;
-
-    f32 tl, tr;
-    longitudinal_step(&tl, &tr, car->v, vst->v, ar, ex, car->delta);
-    cmd->motor_l = tl;
-    cmd->motor_r = tr;
+    /* LADRC 纵向: 用物理层有效加速度做前馈 */
+    f32 thr_l, thr_r;
+    longitudinal_step(&thr_l, &thr_r, car->v, vst->v, a_eff, ex, car->delta);
+    cmd->motor_l = thr_l;
+    cmd->motor_r = thr_r;
 }
 
 static void actuators(const actuator_cmd_t *cmd) {
@@ -95,7 +94,7 @@ void car_control_update(void) {
     if (div == 0) {
         if (g_wp_active) {
             f32 dx = g_vst.x - g_car.x, dy = g_vst.y - g_car.y;
-            if (dx*dx + dy*dy > 0.05f * 0.05f) {  /* 误差>5cm 重同步 */
+            if (dx*dx + dy*dy > 0.25f * 0.25f) {  /* 误差>25cm 重同步 */
                 g_vst.x = g_car.x;
                 g_vst.y = g_car.y;
                 g_vst.theta = g_car.theta;
