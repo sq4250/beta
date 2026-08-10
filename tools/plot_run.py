@@ -43,22 +43,19 @@ def load(path):
     b = np.array(raw)
     if len(b) == 0: raise ValueError(f'No valid data in {path}')
     t, vx, vy, cx, cy, vth, cth = b[:,0], b[:,1], b[:,2], b[:,3], b[:,4], b[:,5], b[:,6]
-    servo = vst_delta = vst_yaw = car_yaw = gyro_z = w_ff = a_ff = vst_v = car_v = f_hat = None
-    if ncols >= 14: servo, vst_delta, vst_yaw, car_yaw, gyro_z, w_ff, a_ff = b[:,7], b[:,8], b[:,9], b[:,10], b[:,11], b[:,12], b[:,13]
-    if ncols >= 17: vst_v, car_v, f_hat = b[:,14], b[:,15], b[:,16]
-    return t, cx, cy, cth, vx, vy, vth, servo, vst_delta, vst_yaw, car_yaw, gyro_z, w_ff, a_ff, vst_v, car_v, f_hat
+    eth_d = delta_fb = None
+    if ncols >= 8: eth_d = b[:,7]
+    if ncols >= 9: delta_fb = b[:,8]
+    return t, cx, cy, cth, vx, vy, vth, eth_d, delta_fb
 
 def sym_ylim(ax, data, margin=1.1, floor=0.1):
     r = max(abs(np.min(data)), abs(np.max(data)), floor) * margin
     ax.set_ylim(-r, r)
 
 def main(path):
-    t,cx,cy,cth,vx,vy,vth,servo,vst_delta,vst_yaw,car_yaw,gyro_z,w_ff,a_ff,vst_v,car_v,f_hat = load(path)
-    has_yaw = vst_yaw is not None
-    has_ed  = vst_delta is not None
-    has_ff  = w_ff is not None
-    has_vf  = vst_v is not None
-    print(f'Loaded {len(t)} pts, t=[{t[0]:.1f},{t[-1]:.1f}]s  yaw={has_yaw} ed={has_ed} vf={has_vf}')
+    t,cx,cy,cth,vx,vy,vth,eth_d,delta_fb = load(path)
+    has_extra = eth_d is not None
+    print(f'Loaded {len(t)} pts, t=[{t[0]:.1f},{t[-1]:.1f}]s  extra={has_extra}')
 
     vth_rad = np.deg2rad(vth)
     dx = vx - cx; dy = vy - cy
@@ -68,126 +65,73 @@ def main(path):
 
     plt.rcParams.update(STYLE)
 
-    # ═══════════════════════════════════════════════════
-    # 图1: 轨迹总览
-    # ═══════════════════════════════════════════════════
-    fig1, ax = plt.subplots(figsize=(10, 10)); fig1.patch.set_facecolor(BG)
+    nrows = 2
+    fig = plt.figure(figsize=(16, 10)); fig.patch.set_facecolor(BG)
+    gs = fig.add_gridspec(nrows, 2, height_ratios=[1.2, 1.2],
+                          width_ratios=[1, 1.3], hspace=0.30, wspace=0.3)
+
+    # (0,0) 轨迹
+    ax = fig.add_subplot(gs[0,0])
     ax.plot(cx, cy, color=RED, lw=1.2, label='Real', alpha=0.85)
     ax.plot(vx, vy, color=BLUE, lw=0.8, alpha=0.5, ls='--', label='Virtual')
-    ax.scatter(WPS[:,0], WPS[:,1], c=YELLOW, s=70, marker='x', zorder=5, linewidths=2.5, label='WP')
+    ax.scatter(WPS[:,0], WPS[:,1], c=YELLOW, s=50, marker='x', zorder=5, linewidths=2, label='WP')
     for i,(wx,wy) in enumerate(WPS):
         ax.annotate('S' if i==0 else str(i), (wx,wy), textcoords='offset points',
-                    xytext=(8,8), color=YELLOW, fontsize=9, fontweight='bold')
+                    xytext=(6,6), color=YELLOW, fontsize=8, fontweight='bold')
     ax.set_xlabel('X [m]'); ax.set_ylabel('Y [m]')
-    ax.set_title('Trajectory', fontweight='bold', fontsize=12)
-    ax.set_aspect('equal'); ax.legend(fontsize=8, loc='lower left'); ax.grid(True, alpha=0.3)
-    out1 = Path(path).stem + '_traj.png'
-    fig1.savefig(out1, dpi=150, facecolor=BG, edgecolor='none'); plt.close(fig1)
-    print(f'Saved: {out1}')
+    ax.set_title('Trajectory', fontweight='bold')
+    ax.set_aspect('equal'); ax.legend(fontsize=6, loc='lower left'); ax.grid(True, alpha=0.3)
 
-    # ═══════════════════════════════════════════════════
-    # 图2: 横向 (2行: 滑移 | ey+eth+eth_d+servo)
-    # ═══════════════════════════════════════════════════
-    fig2, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 8)); fig2.patch.set_facecolor(BG)
+    # (0,1) 航向
+    ax = fig.add_subplot(gs[0,1])
+    ax.plot(t, cth, color=RED, lw=1.2, label='Real')
+    ax.plot(t, vth, color=BLUE, lw=0.8, alpha=0.5, ls='--', label='Virtual')
+    ax.set_xlabel('t [s]'); ax.set_ylabel('Heading [deg]')
+    ax.set_title('Heading', fontweight='bold'); ax.legend(fontsize=7); ax.grid(True, alpha=0.3)
 
-    # 上: 滑移 = car_yaw - gyro_z
-    if has_yaw:
-        slip = car_yaw - gyro_z
-        ax1.plot(t, vst_yaw, color=BLUE, lw=1.0, label='vst_yaw (ref)')
-        ax1.plot(t, car_yaw, color=RED, lw=1.0, ls='--', label='car_yaw (model)')
-        ax1.plot(t, gyro_z, color=AQUA, lw=1.2, label='gyro_z (IMU)')
-        ax1.legend(fontsize=7, ncol=3)
-        ax1.set_ylabel('[rad/s]')
-        ax1_t = ax1.twinx()
-        ax1_t.plot(t, slip, color=ORANGE, lw=1.0, alpha=0.6, label='slip=car_yaw−gyro')
-        ax1_t.legend(fontsize=7, loc='upper right')
-        ax1_t.set_ylabel('slip [rad/s]', color=ORANGE)
-        sym_ylim(ax1, np.concatenate([vst_yaw, car_yaw, gyro_z]))
-        sym_ylim(ax1_t, slip)
-        ax1.axhline(0, color=M, lw=0.8, ls='--')
-    ax1.set_title('Yaw Rate & Slip', fontweight='bold'); ax1.grid(True, alpha=0.3)
+    if has_extra:
+        # (1,:) ey + eth + eth_d + Δδ_fb 叠放 (full width, 自动缩放)
+        # 缩放 eth_d, Δδ_fb 使量级与 ey[cm]/eth[deg] 大致对齐
+        ref_rms = max(np.std(ey*100), np.std(np.abs(eth)), 0.5)
+        s_eth_d = min(ref_rms / max(np.std(np.abs(eth_d)), 0.01), 40.0)
+        s_dfb   = min(ref_rms / max(np.std(np.abs(delta_fb)), 0.001), 60.0)
 
-    # 下: ey + eth + eth_d + servo 叠加
-    if has_yaw:
-        eth_d = vst_yaw - gyro_z
-        ax2.plot(t, ey*100, color=ORANGE, lw=1.2, label='ey [cm]')
-        ax2.plot(t, eth, color=AQUA, lw=1.2, label='eth [deg]')
-        ax2.plot(t, eth_d, color=PURPLE, lw=1.2, label='eth_d [rad/s]')
-        sym_ylim(ax2, np.concatenate([ey*100, eth, eth_d]))
-        if has_ed:
-            ed_delta = servo - vst_delta
-            ax2_t = ax2.twinx()
-            ax2_t.plot(t, ed_delta, color=YELLOW, lw=0.8, alpha=0.6, label='ed=carδ−vstδ [rad]')
-            sym_ylim(ax2_t, ed_delta)
-            ax2_t.set_ylabel('ed [rad]', color=YELLOW)
-            if has_ff:
-                ax2_t2 = ax2.twinx()
-                ax2_t2.spines['right'].set_position(('outward', 50))
-                ax2_t2.plot(t, w_ff, color=PURPLE, lw=0.8, alpha=0.5, ls=':', label='w_ff [rad/s]')
-                sym_ylim(ax2_t2, w_ff)
-                ax2_t2.set_ylabel('w_ff [rad/s]', color=PURPLE)
-                h1,l1=ax2.get_legend_handles_labels()
-                h2,l2=ax2_t.get_legend_handles_labels()
-                h3,l3=ax2_t2.get_legend_handles_labels()
-                ax2.legend(h1+h2+h3,l1+l2+l3,fontsize=6)
-            else:
-                h1,l1=ax2.get_legend_handles_labels(); h2,l2=ax2_t.get_legend_handles_labels()
-                ax2.legend(h1+h2,l1+l2,fontsize=6)
+        ax = fig.add_subplot(gs[1,:])
+        ax.plot(t, ey*100,         color=ORANGE, lw=1.2, label='ey [cm]')
+        ax.plot(t, eth,            color=AQUA,   lw=1.2, label='eth [deg]')
+        ax.plot(t, eth_d * s_eth_d, color=PURPLE, lw=1.0, label=f'eth_d ×{s_eth_d:.0f} [rad/s]')
+        ax.plot(t, delta_fb * s_dfb, color=YELLOW, lw=1.0, label=f'Δδ_fb ×{s_dfb:.0f} [rad]')
+        ax.axhline(0, color=M, lw=0.8, ls='--')
+        sym_ylim(ax, np.concatenate([ey*100, eth, eth_d * s_eth_d, delta_fb * s_dfb]))
+        ax.set_xlabel('t [s]'); ax.set_ylabel('scaled')
+        ax.set_title(f'Error States + Control  (ey[cm], eth[deg], eth_d×{s_eth_d:.0f}, Δδ_fb×{s_dfb:.0f})', fontweight='bold')
+        ax.legend(fontsize=6, loc='upper left'); ax.grid(True, alpha=0.3)
     else:
-        ax2.plot(t, ey*100, color=ORANGE, lw=1.2, label='ey [cm]')
-        ax2.plot(t, eth, color=AQUA, lw=1.2, label='eth [deg]')
-        ax2.legend(fontsize=7)
-    ax2.axhline(0, color=M, lw=0.8, ls='--')
-    ax2.set_xlabel('t [s]'); ax2.set_ylabel('ey/eth/eth_d')
-    ax2.set_title('ey + eth + eth_d + Servo', fontweight='bold'); ax2.grid(True, alpha=0.3)
+        # (1,0) ey + eth
+        ax = fig.add_subplot(gs[1,0])
+        ax.plot(t, ey*100, color=ORANGE, lw=1.2, label='ey [cm]')
+        ax.plot(t, eth, color=AQUA, lw=1.2, label='eth [deg]')
+        sym_ylim(ax, np.concatenate([ey*100, eth]))
+        ax.axhline(0, color=M, lw=0.8, ls='--')
+        ax.set_xlabel('t [s]'); ax.set_ylabel('ey/eth')
+        ax.set_title('ey + eth', fontweight='bold')
+        ax.legend(fontsize=7); ax.grid(True, alpha=0.3)
 
-    out2 = Path(path).stem + '_lat.png'
-    fig2.savefig(out2, dpi=150, facecolor=BG, edgecolor='none'); plt.close(fig2)
-    print(f'Saved: {out2}')
+    fig.suptitle(f'Run: {Path(path).name}  |  {len(t)}pts  {t[-1]:.1f}s',
+                 fontsize=11, fontweight='bold', color=P, y=0.98)
 
-    # ═══════════════════════════════════════════════════
-    # 图3: 纵向 (速度 + Δv + f_hat + e_x)
-    # ═══════════════════════════════════════════════════
-    fig3, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 8)); fig3.patch.set_facecolor(BG)
+    out = Path(path).with_suffix('.png')
+    fig.savefig(str(out), dpi=150, facecolor=BG, edgecolor='none'); plt.close()
+    print(f'Saved: {out}')
 
-    if has_vf:
-        ax1.plot(t, vst_v, color=BLUE, lw=1.2, label='vst_v (ref)')
-        ax1.plot(t, car_v, color=RED, lw=1.2, label='car_v (meas)')
-        ax1.legend(fontsize=7)
-        ax1.set_ylabel('speed [m/s]')
-    ax1.set_title('Speed: VST vs Car', fontweight='bold'); ax1.grid(True, alpha=0.3)
-
-    if has_vf:
-        dv = vst_v - car_v
-        ax2.plot(t, ex*100, color=BLUE, lw=1.2, label='e_x [cm]')
-        ax2.plot(t, dv, color=ORANGE, lw=1.2, label='Δv=vst−car [m/s]')
-        sym_ylim(ax2, np.concatenate([ex*100, dv]))
-        ax2_t = ax2.twinx()
-        ax2_t.plot(t, f_hat, color=PURPLE, lw=1.0, alpha=0.7, label='f_hat [m/s²]')
-        sym_ylim(ax2_t, f_hat)
-        h1,l1=ax2.get_legend_handles_labels(); h2,l2=ax2_t.get_legend_handles_labels()
-        ax2.legend(h1+h2,l1+l2,fontsize=6)
-        ax2_t.set_ylabel('f_hat [m/s²]', color=PURPLE)
-    ax2.axhline(0, color=M, lw=0.8, ls='--')
-    ax2.set_xlabel('t [s]'); ax2.set_ylabel('e_x / Δv')
-    ax2.set_title('e_x + Δv + f_hat', fontweight='bold'); ax2.grid(True, alpha=0.3)
-
-    out3 = Path(path).stem + '_lon.png'
-    fig3.savefig(out3, dpi=150, facecolor=BG, edgecolor='none'); plt.close(fig3)
-    print(f'Saved: {out3}')
-
-    # ── 统计 ──
+    # 统计
     dist = np.sqrt(ex**2 + ey**2)
     print(f'  ey STD={np.std(ey)*100:.1f}cm max={np.max(np.abs(ey))*100:.1f}cm')
     print(f'  ex STD={np.std(ex)*100:.1f}cm max={np.max(np.abs(ex))*100:.1f}cm')
     print(f'  eth STD={np.std(eth):.1f}deg max={np.max(np.abs(eth)):.1f}deg')
-    if has_yaw:
-        eth_d = vst_yaw - gyro_z; slip = car_yaw - gyro_z
+    if has_extra:
         print(f'  eth_d STD={np.std(eth_d):.2f}rad/s max={np.max(np.abs(eth_d)):.2f}rad/s')
-        print(f'  slip  mean={np.mean(slip):.3f} max={np.max(np.abs(slip)):.3f}rad/s')
-    if has_vf:
-        print(f'  Δv   STD={np.std(vst_v-car_v):.2f}m/s')
-        print(f'  f_hat [{np.min(f_hat):.2f},{np.max(f_hat):.2f}]')
+        print(f'  Δδ_fb STD={np.std(delta_fb):.3f}rad max={np.max(np.abs(delta_fb)):.3f}rad')
 
 if __name__ == '__main__':
     p = sys.argv[1] if len(sys.argv) > 1 else str(DATA)

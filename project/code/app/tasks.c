@@ -67,6 +67,7 @@ static bool          g_ready;
 static volatile u32  g_ms;
 static f32           g_ey, g_ex;          /* 跟踪误差, ISR 写入 / debug 读取 */
 static f32           g_w_eff, g_a_eff;    /* 前馈量, ISR 写入 / debug 读取 */
+static f32           g_delta_fb;          /* LQR 反馈转角增量 [rad] */
 static bool          g_wp_active;  /* 航点执行进行中 */
 static Waypoint       g_vst_prev;   /* 上周期 vst 位置 (线段碰撞检测起点) */
 #if CAR_MODE == 3
@@ -142,9 +143,10 @@ static void tracking_layer_step(ActuatorCmd *cmd, CarState *vst,
     ref_frame_error(&e_x, &e_y, car, vst);
     g_ex = e_x; g_ey = e_y;
 
-    /* LQR 横向: 用物理层有效 omega 做前馈 */
-    f32 omega_cmd = lateral_step(car, vst, w_eff, gyro_z, e_y);
-    cmd->servo_delta = clamp(car->delta + omega_cmd * CTRL_DT, -SERVO_DELTA_MAX, SERVO_DELTA_MAX);
+    /* LQR 横向: δ = δ_vst + Δδ_fb (前馈+反馈, 无积分器) */
+    f32 delta_fb = lateral_step(car, vst, gyro_z, e_y);
+    g_delta_fb = delta_fb;
+    cmd->servo_delta = clamp(vst->delta + delta_fb, -SERVO_DELTA_MAX, SERVO_DELTA_MAX);
 
     /* LADRC 纵向: 用物理层有效加速度做前馈 */
     f32 thr_l, thr_r;
@@ -417,22 +419,17 @@ static void task_10hz_debug(void) {
         printf("#bias=%.4fdeg/s  mode=%u  q=%u\r\n",
                (double)(hal_imu_gyro_bias_z(g_imu) * 57.29578f),
                (u32)CAR_MODE, wp_count());
-        printf("t[s],vst_x[m],vst_y[m],car_x[m],car_y[m],vst_th[deg],car_th[deg],servo[rad],vst_delta[rad],vst_yaw[rad/s],car_yaw[rad/s],gyro_z[rad/s],w_ff[rad/s],a_ff[m/s2],vst_v[m/s],car_v[m/s],f_hat[m/s2]\r\n");
+        printf("t[s],vst_x[m],vst_y[m],car_x[m],car_y[m],vst_th[deg],car_th[deg],eth_d[rad/s],delta_fb[rad]\r\n");
         hdr = false;
     }
-    f32 vst_yaw  = bicycle_curvature(g_vst.v, g_vst.delta);
-    f32 car_yaw  = bicycle_curvature(g_car.v, g_cmd.servo_delta);
-    f32 gyro_z   = g_imu_data.gyro[2];
-    printf("%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\r\n",
+    f32 eth_d = bicycle_curvature(g_vst.v, g_vst.delta) - g_imu_data.gyro[2];
+    printf("%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.3f,%.3f\r\n",
            (f32)g_ms * 0.001f,
            (double)g_vst.x, (double)g_vst.y,
            (double)g_car.x, (double)g_car.y,
            (double)(g_vst.theta * 57.29578f), (double)(g_car.theta * 57.29578f),
-           (double)g_cmd.servo_delta, (double)g_vst.delta,
-           (double)vst_yaw, (double)car_yaw, (double)gyro_z,
-           (double)g_w_eff, (double)g_a_eff,
-           (double)g_vst.v, (double)g_car.v,
-           (double)longitudinal_f_hat());
+           (double)eth_d,
+           (double)g_delta_fb);
 }
 
 static void task_1hz_heartbeat(void) {

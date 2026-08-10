@@ -1,38 +1,30 @@
 """
 gen_lqr.py — LQR gain table generator for lqr_gains.h
 
-State-space model (error dynamics in vst frame, FLU: X+前 Y+左, 5-state + ey integral):
+State-space model (error dynamics in VST frame, FLU: X+前 Y+左):
 
-  States: x = [ey_int, ey, eth, eth_d, ed]^T
-    ey_int = ∫ey·dt             (VST 系横向误差积分)
-    ey     = lateral error       (VST 系, e_y > 0 → VST 在真车左侧)
-    eth    = vst_theta − car_theta  (航向误差 [rad], 帧无关标量)
-    eth_d  = ω_vst − ω_car      (模型 yaw rate − 实测 gyro_z)
-    ed     = vst_delta − car_delta  (前轮转角误差 [rad])
+  States: x = [ey, eth, eth_d]^T  (all r−y = VST − Car)
+    ey     = VST 系横向误差 [m]    (ey > 0 → VST 在真车左侧 → 车偏右 → 应左转)
+    eth    = θ_vst − θ_car        (航向误差 [rad])
+    eth_d  = ω_vst_model − gyro_z  (模型 yaw rate − 陀螺实测)
 
   Dynamics:
-    d(ey)/dt ≈ v·eth       (小角度近似 sin(eth)≈eth, v = 车速)
-    d(eth)/dt = eth_d       (定义)
-    d(eth_d)/dt = −wo·eth_d + wo·v/L·ed   (car yaw rate 一阶滞后模型)
-    d(ed)/dt = ω_model      (ω_model = −d(car_delta)/dt, vst_delta 缓变≈0)
+    d(ey)/dt   ≈ v·eth                                    (小角度)
+    d(eth)/dt  = eth_d                                    (定义)
+    d(eth_d)/dt = −wo·eth_d − wo·v/L·Δδ                   (car yaw rate 一阶滞后)
 
-  SIGN CONVENTION (关键):
-    LQR 标准解: u = −Kx = −R⁻¹B^TPx
-    模型 ω_model = d(ed)/dt = −d(car_delta)/dt  (正 ω_model → car delta 减小)
-    代码 omega_fb = +Kx, cmd->delta = car->delta + omega_fb·dt
-    → omega_fb = −ω_model, 两个翻转抵消: omega_fb = −(−Kx) = +Kx ✓
+  Control input: u = Δδ = δ_car − δ_vst  (前轮转角相对前馈的增量 [rad])
 
-  Control input: omega [rad/s] — steering rate (模型约定, 见上)
+  SIGN CONVENTION:
+    LQR 标准解: u* = −Kx = −R⁻¹B^TPx  (K 为 Riccati 原值)
+    B₃ = −wo·v/L < 0 → K 含负数
+    生成脚本存 K_stored = −K, 代码用 u_fb = +K_stored·x  (延续 r−y 风格)
+    δ_cmd = δ_vst + Δδ_fb
 
-  5 Riccati gains -> 5 controller gains:
-    K[0]=Ki, K[1]=K_ey, K[2]=K_eth, K[3]=K_ethd, K[4]=K_ed
-
-  Actual deployed params:
-    python gen_lqr.py --q-ey-int 0.05 --q-ey 25000 --q-eth 3000 --q-ethd 35 \\
-                      -r 1 --wo 15 --v-min 0.1 --v-max 5.0 -N 11
+  Gains: [K_ey, K_eth, K_ethd]  (3-term, stored after sign flip)
 
   Usage:
-    python gen_lqr.py --q-ey-int 0.05 --q-ey 25000 --q-eth 3000 --q-ethd 35 -r 1 --wo 15 ...
+    python gen_lqr.py --q-ey 0.0 --q-eth 5.0 --q-ethd 0.5 -r 1 --wo 15
 """
 
 import argparse
@@ -42,29 +34,47 @@ from scipy.linalg import solve_continuous_are
 
 # Deployed defaults (match core/lqr_gains.h)
 DEFAULTS = {
-    "q_ey_int": 0.05, "q_ey": 10.0, "q_eth": 0.0, "q_ethd": 5.0,
+    "q_ey_int": 0.05, "q_ey": 0.0, "q_eth": 5.0, "q_ethd": 0.5,
     "r": 1.0, "wo": 15.0, "wheelbase": 0.15,
     "v_min": 0.1, "v_max": 5.0, "n_speeds": 11,
-    "integral": True, "simple": True,
+    "integral": False, "simple": True,
 }
 
 
 def compute_gains(v, q_ey_int, q_ey, q_eth, q_ethd, r, wo, wheelbase, integral, simple=False):
     L = wheelbase
     if simple:
-        # 4态直驱: [ey_int, ey, eth, eth_d], ω → car yaw accel
-        A = np.array([
-            [0.0, 1.0, 0.0, 0.0],
-            [0.0, 0.0, v,   0.0],
-            [0.0, 0.0, 0.0, 1.0],
-            [0.0, 0.0, 0.0, 0.0],
-        ])
-        B = np.array([[0.0], [0.0], [0.0], [v/L]])
-        Q = np.diag([q_ey_int, q_ey, q_eth, q_ethd])
-        Rmat = np.array([[r]])
-        P = solve_continuous_are(A, B, Q, Rmat)
-        K = np.linalg.solve(Rmat, B.T @ P)
-        return [K[0, 0], K[0, 1], K[0, 2], K[0, 3]]
+        if integral:
+            # 4态: [ey_int, ey, eth, eth_d], ω → car yaw accel
+            A = np.array([
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, v,   0.0],
+                [0.0, 0.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 0.0],
+            ])
+            B = np.array([[0.0], [0.0], [0.0], [v/L]])
+            Q = np.diag([q_ey_int, q_ey, q_eth, q_ethd])
+            Rmat = np.array([[r]])
+            P = solve_continuous_are(A, B, Q, Rmat)
+            K = np.linalg.solve(Rmat, B.T @ P)
+            return [K[0, 0], K[0, 1], K[0, 2], K[0, 3]]
+        else:
+            # 3态: [ey, eth, eth_d], Δδ → car yaw accel via 一阶惯性 (wo)
+            #   A₃₃ = −wo, B₃ = −wo·v/L < 0
+            A = np.array([
+                [0.0, v,   0.0],
+                [0.0, 0.0, 1.0],
+                [0.0, 0.0, -wo],
+            ])
+            B = np.array([[0.0], [0.0], [-wo * v / L]])
+            Q = np.diag([q_ey, q_eth, q_ethd])
+            Rmat = np.array([[r]])
+            P = solve_continuous_are(A, B, Q, Rmat)
+            K_riccati = np.linalg.solve(Rmat, B.T @ P)  # K = R⁻¹BᵀP
+            # B₃ < 0 → K_riccati 含负数; 翻转使 K_stored 全正
+            # 代码用 u_fb = +K_stored·x  (延续 r−y 风格)
+            K_stored = -K_riccati[0]
+            return [K_stored[0], K_stored[1], K_stored[2]]
     elif integral:
         A = np.array([
             [0.0, 1.0, 0.0,  0.0,     0.0     ],
@@ -114,12 +124,14 @@ def format_header(speeds, gains, args):
     lines = []
     term = f"{n_gains}-term"
     if args.simple:
-        lines.append(f"/* lqr_gains.h — {term} LQR gains (SIMPLE 4-state direct), auto-generated by gen_lqr.py */")
-        lines.append(f"/* Model: [ey_int,ey,eth,eth_d], ω → car yaw accel via v/L */")
+        lines.append(f"/* lqr_gains.h — {term} LQR gains (3-state + wo 一阶惯性), auto-generated by gen_lqr.py */")
+        lines.append(f"/* Model: [ey,eth,eth_d], Δδ → car yaw accel via -wo·eth_d - wo·v/L·Δδ */")
+        lines.append(f"/* K_stored = -K_riccati, code: u_fb = +K_stored·x, δ_cmd = δ_vst + Δδ_fb */")
     else:
         lines.append(f"/* lqr_gains.h — {term} LQR gains, auto-generated by gen_lqr.py */")
     cost = (f"J = {args.q_ey_int}*ey_int^2 + " if args.integral else "J = ")
-    cost += f"{args.q_ey}*ey^2 + {args.q_eth}*eth^2 + {args.q_ethd}*eth_d^2 + {args.r}*omega^2"
+    u_name = "Δδ" if args.simple else "omega"
+    cost += f"{args.q_ey}*ey^2 + {args.q_eth}*eth^2 + {args.q_ethd}*eth_d^2 + {args.r}*{u_name}^2"
     lines.append(f"/* Cost: {cost}, wo={args.wo} */")
     lines.append(f"/* L={args.wheelbase}m, v=[{speeds[0]:.1f},{speeds[-1]:.1f}]m/s, n={n} */")
     lines.append("#ifndef LQR_GAINS_H")
@@ -143,12 +155,15 @@ def format_header(speeds, gains, args):
 def format_summary(speeds, gains, args):
     lines = []
     cost = (f"J = {args.q_ey_int}*ey_int^2 + " if args.integral else "J = ")
-    cost += f"{args.q_ey}*ey^2 + {args.q_eth}*eth^2 + {args.q_ethd}*eth_d^2 + {args.r}*omega^2"
+    u_name = "Δδ" if args.simple else "omega"
+    cost += f"{args.q_ey}*ey^2 + {args.q_eth}*eth^2 + {args.q_ethd}*eth_d^2 + {args.r}*{u_name}^2"
     lines.append(f"Cost: {cost}")
     lines.append(f"wo={args.wo}, L={args.wheelbase}m")
     lines.append("")
-    if args.simple:
+    if args.simple and args.integral:
         hdr = f"{'v':>6s}  {'Ki':>10s}  {'K_ey':>10s}  {'K_eth':>10s}  {'K_ethd':>10s}"
+    elif args.simple:
+        hdr = f"{'v':>6s}  {'K_ey':>10s}  {'K_eth':>10s}  {'K_ethd':>10s}"
     elif args.integral:
         hdr = f"{'v':>6s}  {'Ki':>10s}  {'K_ey':>10s}  {'K_eth':>10s}  {'K_ethd':>10s}  {'K_ed':>10s}"
     else:
@@ -173,9 +188,9 @@ def main():
     parser.add_argument("--v-max",    type=float, default=DEFAULTS["v_max"])
     parser.add_argument("-N",         type=int,   default=DEFAULTS["n_speeds"], dest="n_speeds")
     parser.add_argument("--speeds",   type=str,   default=None)
-    parser.add_argument("--no-integral", action="store_false", dest="integral")
-    parser.add_argument("--simple",     action="store_true", default=False,
-                        help="4-state direct model (no ed, no wo)")
+    parser.add_argument("--integral", action="store_true", default=DEFAULTS["integral"])
+    parser.add_argument("--simple",  action="store_true", default=DEFAULTS["simple"],
+                        help="3-state model with wo + Δδ control")
     parser.add_argument("-o",         type=str,   default=None)
     parser.add_argument("--summary",  action="store_true")
     args = parser.parse_args()

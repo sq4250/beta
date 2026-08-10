@@ -1,23 +1,23 @@
 /**
- * lateral.c — LQR 横向跟踪器 (200Hz), 4-term simple with ey integral
+ * lateral.c — LQR 横向跟踪器 (200Hz), 3-state + wo 一阶惯性
  *
- * 4-state direct model: [ey_int, ey, eth, eth_d]
- *   ω_cmd → car yaw accel via v/L  (no ed, no wo yaw-rate lag)
+ * 3-state 模型: [ey, eth, eth_d], Δδ → car yaw accel via -wo·eth_d - wo·v/L·Δδ
  *
- * 4 gains: [Ki, K_ey, K_eth, K_ethd]
- *   omega_fb = Ki·ey_int + K_ey·ey + K_eth·eth + K_ethd·eth_d
+ * 约定:
+ *   误差 r−y (VST−Car), RotZ(−θ_vst) 投影到 VST 系
+ *   生成存 K_stored = −K_riccati, 代码用 u_fb = +K_stored·x
+ *
+ * 3 gains: [K_ey, K_eth, K_ethd]
+ *   Δδ_fb = K_ey·ey + K_eth·eth + K_ethd·eth_d
  */
 #include "lateral.h"
 #include "lqr_gains.h"
 #include "utils.h"
 
-#define N_GAINS 4
-#define EY_INT_MAX  0.5f    /* anti-windup clamp [m·s] */
-
-static f32 g_ey_int;
+#define N_GAINS 3
 
 void lateral_reset(void) {
-    g_ey_int = 0.0f;
+    /* no integral state to reset */
 }
 
 static void lqr_lookup(f32 g[N_GAINS], f32 v) {
@@ -43,17 +43,11 @@ static void lqr_lookup(f32 g[N_GAINS], f32 v) {
     }
 }
 
-f32 lateral_step(const CarState *rs, const CarState *vst, f32 omega_ff, f32 gyro_z, f32 ey
-    ) {
+f32 lateral_step(const CarState *rs, const CarState *vst, f32 gyro_z, f32 ey) {
     f32 eth   = wrap_pi(vst->theta - rs->theta);
     f32 eth_d = bicycle_curvature(vst->v, vst->delta) - gyro_z;
 
-    /* ey integral with anti-windup */
-    g_ey_int += ey * CTRL_DT;
-    if      (g_ey_int >  EY_INT_MAX) g_ey_int =  EY_INT_MAX;
-    else if (g_ey_int < -EY_INT_MAX) g_ey_int = -EY_INT_MAX;
-
     f32 g[N_GAINS]; lqr_lookup(g, vst->v);
-    f32 omega_fb = g[0]*g_ey_int + g[1]*ey + g[2]*eth + g[3]*eth_d;
-    return omega_ff + omega_fb;
+    f32 delta_fb = g[0]*ey + g[1]*eth + g[2]*eth_d;   /* u_fb = +K_stored·x */
+    return delta_fb;
 }
