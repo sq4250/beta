@@ -419,17 +419,20 @@ static void task_10hz_debug(void) {
         printf("#bias=%.4fdeg/s  mode=%u  q=%u\r\n",
                (double)(hal_imu_gyro_bias_z(g_imu) * 57.29578f),
                (u32)CAR_MODE, wp_count());
-        printf("t[s],vst_x[m],vst_y[m],car_x[m],car_y[m],vst_th[deg],car_th[deg],eth_d[rad/s],delta_fb[rad]\r\n");
+        printf("t[s],vst_x[m],vst_y[m],car_x[m],car_y[m],vst_th[deg],car_th[deg],"
+               "eth_d[rad/s],delta_fb[rad],v_car[m/s],v_vst[m/s],f_hat[m/s2]\r\n");
         hdr = false;
     }
     f32 eth_d = bicycle_curvature(g_vst.v, g_vst.delta) - g_imu_data.gyro[2];
-    printf("%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.3f,%.3f\r\n",
+    printf("%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.3f,%.3f,%.3f,%.3f,%.3f\r\n",
            (f32)g_ms * 0.001f,
            (double)g_vst.x, (double)g_vst.y,
            (double)g_car.x, (double)g_car.y,
            (double)(g_vst.theta * 57.29578f), (double)(g_car.theta * 57.29578f),
            (double)eth_d,
-           (double)g_delta_fb);
+           (double)g_delta_fb,
+           (double)g_car.v, (double)g_vst.v,
+           (double)longitudinal_f_hat());
 }
 
 static void task_1hz_heartbeat(void) {

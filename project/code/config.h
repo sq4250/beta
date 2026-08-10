@@ -75,11 +75,11 @@
 
 //===================================================纵向 LADRC===================================================
 #define LONG_B0            15.0f
-#define LONG_ALPHA         0.5f
+#define LONG_ALPHA         0.6f
 #define LONG_WO            8.0f
 #define LONG_KP            4.0f
 #define LONG_KD            4.0f
-#define LONG_FHAT_MAX      2.0f      // f̂ 钳位, 防打滑扰动溢出
+#define LONG_FHAT_MAX      1.5f      // |f̂| 上限 [-1.5, 0] m/s², 正值钳0 (不打滑)
 #define LONG_DT            CTRL_DT
 //===================================================纵向 LADRC===================================================
 
