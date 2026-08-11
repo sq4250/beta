@@ -1,59 +1,81 @@
 """
 gen_lqr.py — LQR gain table generator for lqr_gains.h
 
-State-space model (error dynamics in vst frame, 5-state with ey integral):
-  [ey_int]   [ 0  1  0   0      0   ] [ey_int]   [ 0 ]
-  | ey    |   | 0  0  v   0      0   | | ey    |   | 0 |
-  | eth   | = | 0  0  0   1      0   | | eth   | + | 0 | * omega
-  | eth_d |   | 0  0  0  -wo  wo*v/L| | eth_d |   | 0 |
-  [ ed    ]   [ 0  0  0   0      0   ] [ ed    ]   [ 1 ]
+State-space model (error dynamics in VST frame, FLU: X+前 Y+左):
 
-Cost:  J = q_ey_int*ey_int^2 + q_ey*ey^2 + q_eth*eth^2 + q_ethd*eth_d^2 + r*omega^2
+  States: x = [ey, eth, eth_d]^T  (all r−y = VST − Car)
+    ey     = VST 系横向误差 [m]    (ey > 0 → VST 在真车左侧 → 车偏右 → 应左转)
+    eth    = θ_vst − θ_car        (航向误差 [rad])
+    eth_d  = ω_vst_model − gyro_z  (模型 yaw rate − 陀螺实测)
 
-Alpha decomposition (5 Riccati gains → 6 controller gains):
-  K_ey_int = K0
-  K_ey     = K1
-  K_ey_d   = alpha * K2 / v
-  K_eth    = (1 - alpha) * K2
-  K_eth_d  = K3
-  K_ed     = K4
+  Dynamics:
+    d(ey)/dt   ≈ v·eth                                    (小角度)
+    d(eth)/dt  = eth_d                                    (定义)
+    d(eth_d)/dt = −wo·eth_d − wo·v/L·Δδ                   (car yaw rate 一阶滞后)
 
-Usage:
-  uv run gen_lqr.py                        # default params
-  uv run gen_lqr.py --q-ey-int 0.1         # integral on lateral error
-  uv run gen_lqr.py --no-integral           # old 5-term (no ey_int)
+  Control input: u = Δδ = δ_car − δ_vst  (前轮转角相对前馈的增量 [rad])
+
+  SIGN CONVENTION:
+    LQR 标准解: u* = −Kx = −R⁻¹B^TPx  (K 为 Riccati 原值)
+    B₃ = −wo·v/L < 0 → K 含负数
+    生成脚本存 K_stored = −K, 代码用 u_fb = +K_stored·x  (延续 r−y 风格)
+    δ_cmd = δ_vst + Δδ_fb
+
+  Gains: [K_ey, K_eth, K_ethd]  (3-term, stored after sign flip)
+
+  Usage:
+    python gen_lqr.py --q-ey 0.0 --q-eth 5.0 --q-ethd 0.5 -r 1 --wo 15
 """
 
 import argparse
-import sys
 from pathlib import Path
-
 import numpy as np
 from scipy.linalg import solve_continuous_are
 
+# Deployed defaults (match core/lqr_gains.h)
 DEFAULTS = {
-    "q_ey_int": 0.05,     # ey integral weight (0 = no integral action)
-    "q_ey":     1.0,
-    "q_eth":    0.5,
-    "q_ethd":   0.30,
-    "r":        0.001,
-    "wo":       30.0,
-    "alpha":    0.55,
-    "wheelbase": 0.15,
-    "v_min":    0.1,
-    "v_max":    4.0,
-    "n_speeds": 9,
-    "integral": True,
+    "q_ey_int": 0.05, "q_ey": 0.0, "q_eth": 5.0, "q_ethd": 0.5,
+    "r": 1.0, "wo": 15.0, "wheelbase": 0.15,
+    "v_min": 0.1, "v_max": 5.0, "n_speeds": 11,
+    "integral": False, "simple": True,
 }
 
 
-def compute_gains(v: float, q_ey_int: float, q_ey: float, q_eth: float,
-                  q_ethd: float, r: float, wo: float, alpha: float,
-                  wheelbase: float, integral: bool) -> list[float]:
-    """Solve Riccati + alpha decompose → 5 or 6 gains at speed v."""
+def compute_gains(v, q_ey_int, q_ey, q_eth, q_ethd, r, wo, wheelbase, integral, simple=False):
     L = wheelbase
-
-    if integral:
+    if simple:
+        if integral:
+            # 4态: [ey_int, ey, eth, eth_d], ω → car yaw accel
+            A = np.array([
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, v,   0.0],
+                [0.0, 0.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 0.0],
+            ])
+            B = np.array([[0.0], [0.0], [0.0], [v/L]])
+            Q = np.diag([q_ey_int, q_ey, q_eth, q_ethd])
+            Rmat = np.array([[r]])
+            P = solve_continuous_are(A, B, Q, Rmat)
+            K = np.linalg.solve(Rmat, B.T @ P)
+            return [K[0, 0], K[0, 1], K[0, 2], K[0, 3]]
+        else:
+            # 3态: [ey, eth, eth_d], Δδ → car yaw accel via 一阶惯性 (wo)
+            #   A₃₃ = −wo, B₃ = −wo·v/L < 0
+            A = np.array([
+                [0.0, v,   0.0],
+                [0.0, 0.0, 1.0],
+                [0.0, 0.0, -wo],
+            ])
+            B = np.array([[0.0], [0.0], [-wo * v / L]])
+            Q = np.diag([q_ey, q_eth, q_ethd])
+            Rmat = np.array([[r]])
+            P = solve_continuous_are(A, B, Q, Rmat)
+            K_riccati = np.linalg.solve(Rmat, B.T @ P)  # K = R⁻¹BᵀP
+            # B₃ < 0 → K_riccati 含负数; 翻转使 K_stored 全正
+            # 代码用 u_fb = +K_stored·x  (延续 r−y 风格)
+            K_stored = -K_riccati[0]
+            return [K_stored[0], K_stored[1], K_stored[2]]
+    elif integral:
         A = np.array([
             [0.0, 1.0, 0.0,  0.0,     0.0     ],
             [0.0, 0.0, v,    0.0,     0.0     ],
@@ -64,36 +86,22 @@ def compute_gains(v: float, q_ey_int: float, q_ey: float, q_eth: float,
         B = np.array([[0.0], [0.0], [0.0], [0.0], [1.0]])
         Q = np.diag([q_ey_int, q_ey, q_eth, q_ethd, 0.0])
         R = np.array([[r]])
-
         P = solve_continuous_are(A, B, Q, R)
-        K = np.linalg.solve(R, B.T @ P)   # [Ki, K_ey, K_eth, K_eth_d, K_ed]
-
-        Ki, K_ey, K_eth_raw, K_eth_d, K_ed = K[0, 0], K[0, 1], K[0, 2], K[0, 3], K[0, 4]
-
-        K_ey_d = alpha * K_eth_raw / max(v, 1e-6)
-        K_eth  = (1.0 - alpha) * K_eth_raw
-
-        return [Ki, K_ey, K_ey_d, K_eth, K_eth_d, K_ed]
+        K = np.linalg.solve(R, B.T @ P)
+        return [K[0, 0], K[0, 1], K[0, 2], K[0, 3], K[0, 4]]
     else:
         A = np.array([
-            [0.0, v,    0.0,  0.0     ],
-            [0.0, 0.0,  1.0,  0.0     ],
-            [0.0, 0.0,  -wo,  wo*v/L  ],
-            [0.0, 0.0,  0.0,  0.0     ],
+            [0.0, v, 0.0,  0.0     ],
+            [0.0, 0.0, 1.0,  0.0     ],
+            [0.0, 0.0, -wo,  wo*v/L  ],
+            [0.0, 0.0, 0.0,  0.0     ],
         ])
         B = np.array([[0.0], [0.0], [0.0], [1.0]])
         Q = np.diag([q_ey, q_eth, q_ethd, 0.0])
         R = np.array([[r]])
-
         P = solve_continuous_are(A, B, Q, R)
         K = np.linalg.solve(R, B.T @ P)
-
-        K_ey, K_eth_raw, K_eth_d, K_ed = K[0, 0], K[0, 1], K[0, 2], K[0, 3]
-
-        K_ey_d = alpha * K_eth_raw / max(v, 1e-6)
-        K_eth  = (1.0 - alpha) * K_eth_raw
-
-        return [K_ey, K_ey_d, K_eth, K_eth_d, K_ed]
+        return [K[0, 0], K[0, 1], K[0, 2], K[0, 3]]
 
 
 def generate(args):
@@ -103,8 +111,8 @@ def generate(args):
         speeds = np.linspace(args.v_min, args.v_max, args.n_speeds)
     gains = np.array([
         compute_gains(v, args.q_ey_int, args.q_ey, args.q_eth, args.q_ethd,
-                      args.r, args.wo, args.alpha, args.wheelbase,
-                      args.integral)
+                      args.r, args.wo, args.wheelbase, args.integral,
+                      simple=args.simple)
         for v in speeds
     ])
     return speeds, gains
@@ -112,27 +120,29 @@ def generate(args):
 
 def format_header(speeds, gains, args):
     n = len(speeds)
-    n_gains = gains.shape[1]  # 5 or 6
+    n_gains = gains.shape[1]
     lines = []
-    term = "6-term" if args.integral else "5-term"
-    lines.append(f"/* lqr_gains.h — {term} LQR gains, auto-generated by gen_lqr.py */")
+    term = f"{n_gains}-term"
+    if args.simple:
+        lines.append(f"/* lqr_gains.h — {term} LQR gains (3-state + wo 一阶惯性), auto-generated by gen_lqr.py */")
+        lines.append(f"/* Model: [ey,eth,eth_d], Δδ → car yaw accel via -wo·eth_d - wo·v/L·Δδ */")
+        lines.append(f"/* K_stored = -K_riccati, code: u_fb = +K_stored·x, δ_cmd = δ_vst + Δδ_fb */")
+    else:
+        lines.append(f"/* lqr_gains.h — {term} LQR gains, auto-generated by gen_lqr.py */")
     cost = (f"J = {args.q_ey_int}*ey_int^2 + " if args.integral else "J = ")
-    cost += f"{args.q_ey}*ey^2 + {args.q_eth}*eth^2 + {args.q_ethd}*eth_d^2 + {args.r}*omega^2"
-    lines.append(f"/* Cost: {cost}, wo={args.wo}, alpha={args.alpha} */")
-    lines.append(f"/* L={args.wheelbase}m, v=[{speeds[0]:.1f},{speeds[-1]:.1f}]m/s, "
-                 f"n={n} */")
+    u_name = "Δδ" if args.simple else "omega"
+    cost += f"{args.q_ey}*ey^2 + {args.q_eth}*eth^2 + {args.q_ethd}*eth_d^2 + {args.r}*{u_name}^2"
+    lines.append(f"/* Cost: {cost}, wo={args.wo} */")
+    lines.append(f"/* L={args.wheelbase}m, v=[{speeds[0]:.1f},{speeds[-1]:.1f}]m/s, n={n} */")
     lines.append("#ifndef LQR_GAINS_H")
     lines.append("#define LQR_GAINS_H")
     lines.append('#include "common.h"')
     lines.append("")
     lines.append(f"#define LQR_SPEED_POINTS {n}")
     lines.append("")
-
     bp_str = "{" + ", ".join(f"{s:.1f}f" for s in speeds) + "}"
     lines.append(f"static const f32 lqr_speed_bp[] = {bp_str};")
-
     lines.append(f"static const f32 lqr_gains[{n}][{n_gains}] = {{")
-    fmt = f"{{{', '.join([f'{x:12.6f}f' for x in gains[0]])}}}"
     for i, (v, g) in enumerate(zip(speeds, gains)):
         g_str = "{" + ", ".join(f"{x:12.6f}f" for x in g) + "}"
         lines.append(f"    {g_str},  /* v={v:.1f} */")
@@ -145,16 +155,19 @@ def format_header(speeds, gains, args):
 def format_summary(speeds, gains, args):
     lines = []
     cost = (f"J = {args.q_ey_int}*ey_int^2 + " if args.integral else "J = ")
-    cost += f"{args.q_ey}*ey^2 + {args.q_eth}*eth^2 + {args.q_ethd}*eth_d^2 + {args.r}*omega^2"
+    u_name = "Δδ" if args.simple else "omega"
+    cost += f"{args.q_ey}*ey^2 + {args.q_eth}*eth^2 + {args.q_ethd}*eth_d^2 + {args.r}*{u_name}^2"
     lines.append(f"Cost: {cost}")
-    lines.append(f"wo={args.wo}, alpha={args.alpha}, L={args.wheelbase}m")
+    lines.append(f"wo={args.wo}, L={args.wheelbase}m")
     lines.append("")
-    if args.integral:
-        hdr = (f"{'v':>6s}  {'Ki':>10s}  {'K_ey':>10s}  {'K_ey_d':>10s}  "
-               f"{'K_eth':>10s}  {'K_eth_d':>10s}  {'K_ed':>10s}")
+    if args.simple and args.integral:
+        hdr = f"{'v':>6s}  {'Ki':>10s}  {'K_ey':>10s}  {'K_eth':>10s}  {'K_ethd':>10s}"
+    elif args.simple:
+        hdr = f"{'v':>6s}  {'K_ey':>10s}  {'K_eth':>10s}  {'K_ethd':>10s}"
+    elif args.integral:
+        hdr = f"{'v':>6s}  {'Ki':>10s}  {'K_ey':>10s}  {'K_eth':>10s}  {'K_ethd':>10s}  {'K_ed':>10s}"
     else:
-        hdr = (f"{'v':>6s}  {'K_ey':>10s}  {'K_ey_d':>10s}  "
-               f"{'K_eth':>10s}  {'K_eth_d':>10s}  {'K_ed':>10s}")
+        hdr = f"{'v':>6s}  {'K_ey':>10s}  {'K_eth':>10s}  {'K_ethd':>10s}  {'K_ed':>10s}"
     lines.append(hdr)
     lines.append("-" * len(hdr))
     for v, g in zip(speeds, gains):
@@ -164,28 +177,22 @@ def format_summary(speeds, gains, args):
 
 def main():
     parser = argparse.ArgumentParser(description="Generate LQR gain table")
-    parser.add_argument("--q-ey-int", type=float, default=DEFAULTS["q_ey_int"],
-                        help="ey integral penalty weight")
+    parser.add_argument("--q-ey-int", type=float, default=DEFAULTS["q_ey_int"])
     parser.add_argument("--q-ey",     type=float, default=DEFAULTS["q_ey"])
     parser.add_argument("--q-eth",    type=float, default=DEFAULTS["q_eth"])
     parser.add_argument("--q-ethd",   type=float, default=DEFAULTS["q_ethd"])
     parser.add_argument("-r",         type=float, default=DEFAULTS["r"])
     parser.add_argument("--wo",       type=float, default=DEFAULTS["wo"])
-    parser.add_argument("--alpha",    type=float, default=DEFAULTS["alpha"])
-    parser.add_argument("--L",        type=float, default=DEFAULTS["wheelbase"],
-                        dest="wheelbase")
+    parser.add_argument("--L",        type=float, default=DEFAULTS["wheelbase"], dest="wheelbase")
     parser.add_argument("--v-min",    type=float, default=DEFAULTS["v_min"])
     parser.add_argument("--v-max",    type=float, default=DEFAULTS["v_max"])
-    parser.add_argument("-N",         type=int,   default=DEFAULTS["n_speeds"],
-                        dest="n_speeds")
-    parser.add_argument("--speeds",   type=str,   default=None,
-                        help="comma-separated custom speeds, e.g. 0.1,0.5,1.0,2.0")
-    parser.add_argument("--no-integral", action="store_false", dest="integral",
-                        help="disable ey integral (old 5-term)")
-    parser.add_argument("-o",         type=str,   default=None,
-                        help="output file (default: stdout)")
-    parser.add_argument("--summary",  action="store_true",
-                        help="print parameter summary only")
+    parser.add_argument("-N",         type=int,   default=DEFAULTS["n_speeds"], dest="n_speeds")
+    parser.add_argument("--speeds",   type=str,   default=None)
+    parser.add_argument("--integral", action="store_true", default=DEFAULTS["integral"])
+    parser.add_argument("--simple",  action="store_true", default=DEFAULTS["simple"],
+                        help="3-state model with wo + Δδ control")
+    parser.add_argument("-o",         type=str,   default=None)
+    parser.add_argument("--summary",  action="store_true")
     args = parser.parse_args()
 
     speeds, gains = generate(args)
@@ -195,7 +202,6 @@ def main():
         return
 
     header = format_header(speeds, gains, args)
-
     if args.o:
         out_path = Path(args.o)
         out_path.write_text(header + "\n", encoding="utf-8")
