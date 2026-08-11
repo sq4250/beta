@@ -201,17 +201,18 @@ static void mode3_step(const car_comm_rx_t *rx) {
 
     planner_step();
 
-    /* 航点耗尽 → 刹车停车 (自主巡点暂时关闭, 测试通讯) */
+    /* 航点耗尽 */
     if (!wp_count()) {
-        g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0;
+        if (!s_auto_active) {
+            /* 首次耗尽 → 自主探索: 排除刚走完的点, TSP 访问剩余信标 */
+            s_auto_active = true;
+            visited_clear();
+            if (s_last_visited < BEACON_COUNT) visited_mark(s_last_visited);
+        } else {
+            /* 自主探索也救不了 → 真正没有未访问信标了, 刹车 */
+            g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0;
+        }
     }
-    /*
-    if (!wp_count() && !s_auto_active) {
-        s_auto_active = true;
-        visited_clear();
-        visited_mark(s_last_visited);
-    }
-    */
 }
 
 #endif

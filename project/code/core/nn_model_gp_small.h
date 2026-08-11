@@ -31,7 +31,7 @@
 #define A_LONG_MAX      5.0f       // 最大纵向加速度 [m/s²]
 #define A_BRAKE_MAX     3.0f       // 最大制动减速度 [m/s²]
 #define A_LAT_MAX       4.0f       // 最大横向加速度 [m/s²]
-#define V_MAX           1.5f       // 最大速度 [m/s]
+#define V_MAX           2.5f       // 最大速度 [m/s]
 #define DELTA_MAX       0.46364761f // 前轮转角上限 [rad] (≈26.5°)
 #define OMEGA_DELTA_MAX 14.0f      // 前轮转角角速度上限 [rad/s]
 
