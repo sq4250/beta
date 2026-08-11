@@ -95,7 +95,7 @@ void car_control_update(void) {
     if (div == 0) {
         if (g_wp_active) {
             f32 dx = g_vst.x - g_car.x, dy = g_vst.y - g_car.y;
-            if (dx*dx + dy*dy > 0.25f * 0.25f) {  /* 误差>25cm 重同步 */
+            if (dx*dx + dy*dy > 0.05f * 0.05f) {  /* 误差>5cm 重同步 */
                 g_vst.x = g_car.x;
                 g_vst.y = g_car.y;
                 g_vst.theta = g_car.theta;
