@@ -7,11 +7,14 @@
 #include "common.h"
 
 /* ── 模型 ── */
-#define NN_VER_GP_SMALL    400
-#define NN_MODEL_VERSION   NN_VER_GP_SMALL   /* GP-Small 3.7K polar + FullSim */
+#define NN_VER_A5B3L4      400   /* Kamm 5/3/4  GP-Small 3.7K */
+#define NN_VER_A3B3L3      401   /* Sym3 3/3/3  GP-Small 3.7K */
+#define NN_MODEL_VERSION   NN_VER_A5B3L4   /* 当前选用模型 */
 
-#if   NN_MODEL_VERSION == NN_VER_GP_SMALL
+#if   NN_MODEL_VERSION == NN_VER_A5B3L4
   #include "core/nn_model_gp_small.h"
+#elif NN_MODEL_VERSION == NN_VER_A3B3L3
+  #include "core/nn_model_sym3.h"
 #endif
 
 //===================================================车体几何===================================================

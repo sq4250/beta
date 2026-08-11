@@ -6,6 +6,8 @@
  * Params: 3762
  * Kamm asymmetric: a_long=5.0 a_brake=3.0 a_lat=4.0
  */
+#include "config.h"
+#if NN_MODEL_VERSION == NN_VER_A5B3L4
 #include "nn_model_gp_small.h"
 #include "car_state.h"
 #include "utils.h"
@@ -601,3 +603,4 @@ void nn_planner_step(f32 out[2], const CarState *vst,
     polar_encode(inp, vst, g1, g2, g3);
     nn_forward(out, inp);
 }
+#endif /* NN_MODEL_VERSION == NN_VER_A5B3L4 */
