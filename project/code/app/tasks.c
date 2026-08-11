@@ -20,6 +20,7 @@ planner_action_t g_plan;
 waypoint_t      g_car_prev;
 bool          g_wp_active;
 f32           g_ey, g_ex, g_delta_fb;
+bool          g_vst_seeded;
 volatile u32  g_ms;
 
 static imu_data_t     s_imu;
@@ -98,6 +99,7 @@ void car_control_update(void) {
             g_car.theta = 0.0f;
             g_vst = g_car;
             vst_seeded = true;
+            g_vst_seeded = true;
         }
 
         {
@@ -122,6 +124,8 @@ void task_20hz_report(void) {
 }
 
 static void task_10hz_debug(void) {
+    if (!g_vst_seeded) return;  /* INS/VST 初始化前不打印 */
+
     static bool hdr = true;
     if (hdr) {
         printf("#bias=%.4fdeg/s mode=%u q=%u\r\n",
