@@ -94,7 +94,12 @@ void car_control_update(void) {
 
     if (div == 0) {
         static bool vst_seeded = false;
-        if (!vst_seeded) { g_vst = g_car; vst_seeded = true; }
+        if (!vst_seeded) {
+            car_estimate_set_yaw_offset(wrap_pi(g_car.theta));
+            g_car.theta = 0.0f;
+            g_vst = g_car;
+            vst_seeded = true;
+        }
 
         {
             f32 dx = g_vst.x - g_car.x, dy = g_vst.y - g_car.y;
