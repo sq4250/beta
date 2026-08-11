@@ -6,7 +6,9 @@
 #include "utils.h"
 #include <math.h>
 
-static f32 g_v_filt = 0.0f;  // EMA 滤波速度
+static f32 g_v_filt     = 0.0f;  // EMA 滤波速度
+static f32 g_yaw_offset  = 0.0f;  // 初始航向偏置 (上电时刻归零)
+static bool g_yaw_done   = false;
 
 void car_estimate_update(car_state_t *car, const imu_data_t *imu,
                          const encoder_t *enc, const actuator_cmd_t *cmd
@@ -20,6 +22,10 @@ void car_estimate_update(car_state_t *car, const imu_data_t *imu,
     } else {
         car->theta += imu->gyro[2] * ISR_DT;
     }
+
+    /* 首帧航向记为偏置, 系统从 θ=0 开始 */
+    if (!g_yaw_done) { g_yaw_offset = car->theta; g_yaw_done = true; }
+    car->theta = wrap_pi(car->theta - g_yaw_offset);
 
     // ── 速度: EMA 低通滤波 ──
     f32 vl = enc->left  * (f32)TRACKER_FREQ;
