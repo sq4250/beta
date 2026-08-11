@@ -197,7 +197,7 @@ static void mode3_merge(const car_comm_rx_t *rx) {
 
 static void mode3_step(const car_comm_rx_t *rx) {
     mode3_merge(rx);
-    if (!g_wp_active) return;
+    if (!g_wp_active) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
 
     planner_step();
 
@@ -260,7 +260,7 @@ static const struct {
 
 void planner_init(void) {
     wp_clear(); g_wp_active = false;
-    g_plan.a = 0; g_plan.omega = 0;
+    g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0;
 #if CAR_MODE != 3
     wp_load_beacons();
 #endif
