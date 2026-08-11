@@ -227,8 +227,8 @@ static void mode4_step(const car_comm_rx_t *rx) {
     if (rx->stop_seq != s_stop_s) {
         s_stop_s = rx->stop_seq; wp_clear();
         wp_load_beacons();
-        g_wp_active = false; g_vst = g_car; g_car_prev = wp_of(&g_car); lateral_reset();
-        g_plan.a = 0; g_plan.omega = 0;
+        g_wp_active = false; g_car_prev = wp_of(&g_car); lateral_reset();
+        g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0;
     }
     if (rx->start_seq != s_start_s) {
         s_start_s = rx->start_seq;

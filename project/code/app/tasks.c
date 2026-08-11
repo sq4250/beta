@@ -93,6 +93,9 @@ void car_control_update(void) {
     if (g_ms < STARTUP_DELAY_MS) return;
 
     if (div == 0) {
+        static bool vst_seeded = false;
+        if (!vst_seeded) { g_vst = g_car; vst_seeded = true; }
+
         if (g_wp_active) {
             f32 dx = g_vst.x - g_car.x, dy = g_vst.y - g_car.y;
             if (dx*dx + dy*dy > 0.05f * 0.05f) {  /* 误差>5cm 重同步 */
@@ -102,8 +105,6 @@ void car_control_update(void) {
                 g_vst.v = g_car.v;
                 g_vst.delta = g_car.delta;
             }
-        } else {
-            g_vst = g_car;  /* 等飞机: VST 咬住实车, 速度闭环在线待命 */
         }
         tracking(&s_cmd, &g_vst, &g_car, &g_plan, s_imu.gyro[2]);
         actuators(&s_cmd);
