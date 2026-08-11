@@ -96,7 +96,7 @@ void car_control_update(void) {
         static bool vst_seeded = false;
         if (!vst_seeded) { g_vst = g_car; vst_seeded = true; }
 
-        if (g_wp_active) {
+        {
             f32 dx = g_vst.x - g_car.x, dy = g_vst.y - g_car.y;
             if (dx*dx + dy*dy > 0.05f * 0.05f) {  /* 误差>5cm 重同步 */
                 g_vst.x = g_car.x;
