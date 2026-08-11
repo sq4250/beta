@@ -19,7 +19,7 @@ car_state_t      g_car, g_vst;
 planner_action_t g_plan;
 waypoint_t      g_car_prev;
 bool          g_wp_active;
-f32           g_ey, g_ex;
+f32           g_ey, g_ex, g_delta_fb;
 volatile u32  g_ms;
 
 static imu_data_t     s_imu;
@@ -51,6 +51,7 @@ static void tracking(actuator_cmd_t *cmd, car_state_t *vst, const car_state_t *c
 
     /* LQR 横向: δ = δ_vst + Δδ_fb (前馈+反馈, 无积分器) */
     f32 delta_fb = lateral_step(car, vst, gyro_z, ey);
+    g_delta_fb = delta_fb;
     cmd->servo_delta = clamp(vst->delta + delta_fb, -SERVO_DELTA_MAX, SERVO_DELTA_MAX);
 
     /* LADRC 纵向: 用物理层有效加速度做前馈 */
@@ -120,13 +121,20 @@ static void task_10hz_debug(void) {
     if (hdr) {
         printf("#bias=%.4fdeg/s mode=%u q=%u\r\n",
                (double)(hal_imu_gyro_bias_z(s_himu) * 57.29578f), (u32)CAR_MODE, wp_count());
-        printf("t[s],car_x[m],car_y[m],car_th[deg],vst_x[m],vst_y[m],vst_th[deg]\r\n");
+        printf("t[s],vst_x[m],vst_y[m],car_x[m],car_y[m],vst_th[deg],car_th[deg],"
+               "eth_d[rad/s],delta_fb[rad],v_car[m/s],v_vst[m/s],f_hat[m/s2]\r\n");
         hdr = false;
     }
-    printf("%.3f,%.3f,%.3f,%.1f,%.3f,%.3f,%.1f\r\n",
-           (f32)g_ms * 0.001f, (double)g_car.x, (double)g_car.y,
-           (double)(g_car.theta * 57.29578f), (double)g_vst.x, (double)g_vst.y,
-           (double)(g_vst.theta * 57.29578f));
+    f32 eth_d = bicycle_curvature(g_vst.v, g_vst.delta) - s_imu.gyro[2];
+    printf("%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%.3f,%.3f,%.3f,%.3f,%.3f\r\n",
+           (f32)g_ms * 0.001f,
+           (double)g_vst.x, (double)g_vst.y,
+           (double)g_car.x, (double)g_car.y,
+           (double)(g_vst.theta * 57.29578f), (double)(g_car.theta * 57.29578f),
+           (double)eth_d,
+           (double)g_delta_fb,
+           (double)g_car.v, (double)g_vst.v,
+           (double)longitudinal_f_hat());
 }
 
 static void task_1hz_heartbeat(void) { gpio_toggle_level(P23_7); }

@@ -131,7 +131,7 @@ def main(path):
     print(f'  eth STD={np.std(eth):.1f}deg max={np.max(np.abs(eth)):.1f}deg')
     if has_extra:
         print(f'  eth_d STD={np.std(eth_d):.2f}rad/s max={np.max(np.abs(eth_d)):.2f}rad/s')
-        print(f'  Δδ_fb STD={np.std(delta_fb):.3f}rad max={np.max(np.abs(delta_fb)):.3f}rad')
+        print(f'  delta_fb STD={np.std(delta_fb):.3f}rad max={np.max(np.abs(delta_fb)):.3f}rad')
 
 if __name__ == '__main__':
     p = sys.argv[1] if len(sys.argv) > 1 else str(DATA)
