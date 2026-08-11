@@ -90,7 +90,6 @@ void car_control_update(void) {
     if (++div >= TRACKER_DIV) { div = 0; hal_encoder_get(&s_enc); }
 
     car_estimate_update(&g_car, &s_imu, &s_enc, &s_cmd);
-    if (g_ms < STARTUP_DELAY_MS) return;
 
     if (div == 0) {
         static bool vst_seeded = false;

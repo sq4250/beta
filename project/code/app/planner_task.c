@@ -268,6 +268,7 @@ void planner_init(void) {
 }
 
 void task_20hz_planner(void) {
+    if (g_ms < STARTUP_DELAY_MS) return;  /* 控制器先站稳, 规划器延后接入 */
     car_comm_rx_t rx = car_comm_get();
     s_mode.step(&rx);
 }
