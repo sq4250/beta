@@ -30,13 +30,7 @@
 #define NN_A_SCALE      3.14159265f
 #endif
 
-/* Physical constraints (Symmetric circle 3/3/3) */
-#define A_LONG_MAX      3.0f
-#define A_BRAKE_MAX     3.0f
-#define A_LAT_MAX       3.0f
-#define V_MAX           1.5f
-#define DELTA_MAX       0.46364761f
-#define OMEGA_DELTA_MAX 14.0f
+/* Physical constraints — 运行时由 model_desc_t 提供 */
 
 void nn_planner_step(f32 out[2], const car_state_t *vst,
                      const waypoint_t *g1, const waypoint_t *g2, const waypoint_t *g3,

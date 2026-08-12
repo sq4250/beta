@@ -31,17 +31,7 @@
 #define NN_A_SCALE      3.14159265f
 #endif
 
-/* ── Kamm 专属物理约束 (混合模式引用) ── */
-#define KAMM_A_LONG_MAX  5.0f
-#define KAMM_A_BRAKE_MAX 3.0f
-#define KAMM_A_LAT_MAX   4.0f
-#define KAMM_V_MAX       3.0f
-
-#ifndef A_LONG_MAX
-#define A_LONG_MAX      KAMM_A_LONG_MAX
-#define A_BRAKE_MAX     KAMM_A_BRAKE_MAX
-#define A_LAT_MAX       KAMM_A_LAT_MAX
-#define V_MAX           KAMM_V_MAX
+/* Physical constraints (documentation — 运行时由 model_desc_t 提供) */
 #define DELTA_MAX       0.46364761f
 #define OMEGA_DELTA_MAX 14.0f
 #endif

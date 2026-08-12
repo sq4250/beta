@@ -3188,6 +3188,9 @@
                 <name>$PROJ_DIR$\..\..\..\nn_weights.h</name>
             </file>
             <file>
+                <name>$PROJ_DIR$\..\..\code\core\model_factory.h</name>
+            </file>
+            <file>
                 <name>$PROJ_DIR$\..\..\code\core\planner.c</name>
             </file>
             <file>

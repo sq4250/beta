@@ -9,6 +9,7 @@
 #include "config.h"
 #if NN_MODEL_VERSION == NN_VER_A5B3L4 || NN_MODEL_VERSION == NN_VER_HYBRID
 #include "nn_model_a5b3l4.h"
+#include "model_factory.h"
 #include "utils.h"
 #include <math.h>
 
@@ -602,4 +603,12 @@ void nn_planner_step_kamm(f32 out[2], const car_state_t *vst,
     polar_encode(inp, vst, g1, g2, g3);
     nn_forward(out, inp);
 }
+
+const model_desc_t g_model_kamm = {
+    .forward     = nn_planner_step_kamm,
+    .a_long_max  = 5.0f,
+    .a_brake_max = 3.0f,
+    .a_lat_max   = 4.0f,
+    .v_max       = 3.0f,
+};
 #endif

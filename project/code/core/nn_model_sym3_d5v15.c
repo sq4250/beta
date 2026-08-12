@@ -4,6 +4,7 @@
 #include "config.h"
 #if NN_MODEL_VERSION == NN_VER_A3B3L3_D5V15 || NN_MODEL_VERSION == NN_VER_HYBRID
 #include "nn_model_sym3_d5v15.h"
+#include "model_factory.h"
 #include "utils.h"
 #include <math.h>
 
@@ -579,4 +580,12 @@ void nn_planner_step_d5v15(f32 out[2], const car_state_t *vst,
     polar_encode(inp, vst, g1, g2, g3);
     nn_forward(out, inp);
 }
+
+const model_desc_t g_model_d5v15 = {
+    .forward     = nn_planner_step_d5v15,
+    .a_long_max  = 3.0f,
+    .a_brake_max = 3.0f,
+    .a_lat_max   = 3.0f,
+    .v_max       = 2.5f,
+};
 #endif /* NN_MODEL_VERSION == NN_VER_A3B3L3_D5V15 || NN_MODEL_VERSION == NN_VER_HYBRID */

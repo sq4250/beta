@@ -25,16 +25,7 @@
 #define NN_A_SCALE      3.14159265f
 #endif
 
-#ifndef A_LONG_MAX
-#define A_LONG_MAX      3.0f
-#define A_BRAKE_MAX     3.0f
-#define A_LAT_MAX       3.0f
-#define V_MAX           1.5f
-#define DELTA_MAX       0.46364761f
-#define OMEGA_DELTA_MAX 14.0f
-#endif
-
-#define DELTA_ARRIVE_MAX 0.08726646f  /* 5° — D5 arrival constraint */
+/* Physical constraints — 运行时由 model_desc_t 提供 */
 
 void nn_planner_step_d5(f32 out[2], const car_state_t *vst,
                         const waypoint_t *g1, const waypoint_t *g2, const waypoint_t *g3,

@@ -25,20 +25,7 @@
 #define NN_A_SCALE      3.14159265f
 #endif
 
-/* ── D5V15 专属物理约束 (混合模式引用, 部署用保守值) ── */
-#define D5V15_A_LONG_MAX  3.0f
-#define D5V15_A_BRAKE_MAX 3.0f
-#define D5V15_A_LAT_MAX   3.0f
-#define D5V15_V_MAX       2.5f   /* 模型会主动降速过点, 无需人为限 1.5 */
-
-#ifndef A_LONG_MAX
-#define A_LONG_MAX      D5V15_A_LONG_MAX
-#define A_BRAKE_MAX     D5V15_A_BRAKE_MAX
-#define A_LAT_MAX       D5V15_A_LAT_MAX
-#define V_MAX           D5V15_V_MAX
-#define DELTA_MAX       0.46364761f
-#define OMEGA_DELTA_MAX 14.0f
-#endif
+/* Physical constraints (documentation — 运行时由 model_desc_t 提供) */
 
 void nn_planner_step_d5v15(f32 out[2], const car_state_t *vst,
                            const waypoint_t *g1, const waypoint_t *g2, const waypoint_t *g3,
