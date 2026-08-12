@@ -587,10 +587,10 @@ static void nn_forward(f32 out[2], const f32 inp[10]) {
     f32 h3[NN_H3];  dense_relu(h3, h2,  fc3_w, fc3_b, NN_H2, NN_H3);
     dense_linear(out, h3, fc4_w, fc4_b, NN_H3, 2);
 
-    if (out[0] >  NN_A_MAX)       out[0] =  NN_A_MAX;
-    if (out[0] < -NN_A_BRAKE_MAX) out[0] = -NN_A_BRAKE_MAX;
-    if (out[1] >  NN_O_MAX)       out[1] =  NN_O_MAX;
-    if (out[1] < -NN_O_MAX)       out[1] = -NN_O_MAX;
+    if (out[0] >  g_model_active->nn_a_max)       out[0] =  g_model_active->nn_a_max;
+    if (out[0] < -g_model_active->nn_a_brake_max) out[0] = -g_model_active->nn_a_brake_max;
+    if (out[1] >  g_model_active->nn_o_max)       out[1] =  g_model_active->nn_o_max;
+    if (out[1] < -g_model_active->nn_o_max)       out[1] = -g_model_active->nn_o_max;
 }
 
 /* ═══ Public entry ═══ */
@@ -605,10 +605,13 @@ void nn_planner_step(f32 out[2], const car_state_t *vst,
 }
 
 const model_desc_t g_model_sym3 = {
-    .forward     = nn_planner_step,
-    .a_long_max  = 3.0f,
-    .a_brake_max = 3.0f,
-    .a_lat_max   = 3.0f,
-    .v_max       = 1.5f,
+    .forward       = nn_planner_step,
+    .a_long_max    = 3.0f,
+    .a_brake_max   = 3.0f,
+    .a_lat_max     = 3.0f,
+    .v_max         = 1.5f,
+    .nn_a_max      = 3.0f,
+    .nn_a_brake_max = 3.0f,
+    .nn_o_max      = 14.0f,
 };
 #endif /* NN_MODEL_VERSION == NN_VER_A3B3L3 */

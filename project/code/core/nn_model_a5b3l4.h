@@ -31,10 +31,8 @@
 #define NN_A_SCALE      3.14159265f
 #endif
 
-/* Physical constraints (documentation — 运行时由 model_desc_t 提供) */
-#define DELTA_MAX       0.46364761f
-#define OMEGA_DELTA_MAX 14.0f
-#endif
+/* Physical constraints — 运行时由 model_desc_t 提供 */
+/* DELTA_MAX / OMEGA_DELTA_MAX 在 config.h 定义 */
 
 void nn_planner_step_kamm(f32 out[2], const car_state_t *vst,
                           const waypoint_t *g1, const waypoint_t *g2, const waypoint_t *g3,
