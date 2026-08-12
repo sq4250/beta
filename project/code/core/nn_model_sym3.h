@@ -16,15 +16,19 @@
 #define NN_H3        16
 #define NN_OUT_DIM   2
 
-/* Output clamp */
+/* Output clamp — 首次定义优先 */
+#ifndef NN_A_MAX
 #define NN_A_MAX        3.0f
 #define NN_A_BRAKE_MAX  3.0f
 #define NN_O_MAX        14.0f
+#endif
 
 /* Input normalization */
+#ifndef NN_V_SCALE
 #define NN_V_SCALE      5.0f
 #define NN_D_SCALE      5.0f
 #define NN_A_SCALE      3.14159265f
+#endif
 
 /* Physical constraints (Symmetric circle 3/3/3) */
 #define A_LONG_MAX      3.0f

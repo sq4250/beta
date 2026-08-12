@@ -3179,6 +3179,12 @@
                 <name>$PROJ_DIR$\..\..\code\core\nn_model_sym3_d5.h</name>
             </file>
             <file>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_sym3_d5v15.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_sym3_d5v15.h</name>
+            </file>
+            <file>
                 <name>$PROJ_DIR$\..\..\..\nn_weights.h</name>
             </file>
             <file>

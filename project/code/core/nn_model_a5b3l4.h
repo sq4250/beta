@@ -17,22 +17,26 @@
 #define NN_H3        16
 #define NN_OUT_DIM   2
 
-/* Output clamp */
+/* Output clamp — 首次定义优先 */
+#ifndef NN_A_MAX
 #define NN_A_MAX        5.0f
 #define NN_A_BRAKE_MAX  3.0f
 #define NN_O_MAX        14.0f
+#endif
 
-/* Input normalization constants (must match training) */
-#define NN_V_SCALE      5.0f       // v / V_SCALE  ∈ [0, 1]
-#define NN_D_SCALE      5.0f       // d / D_SCALE  ∈ [0, ~1.2]
-#define NN_A_SCALE      3.14159265f // θ / π       ∈ [-1, 1]
+/* Input normalization */
+#ifndef NN_V_SCALE
+#define NN_V_SCALE      5.0f
+#define NN_D_SCALE      5.0f
+#define NN_A_SCALE      3.14159265f
+#endif
 
 /* Physical constraints (Kamm asymmetric friction ellipse) — 首次定义优先 */
 #ifndef A_LONG_MAX
 #define A_LONG_MAX      5.0f
 #define A_BRAKE_MAX     3.0f
 #define A_LAT_MAX       4.0f
-#define V_MAX           2.5f
+#define V_MAX           3.0f
 #define DELTA_MAX       0.46364761f
 #define OMEGA_DELTA_MAX 14.0f
 #endif
