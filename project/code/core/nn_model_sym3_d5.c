@@ -7,7 +7,7 @@
  * Symmetric circle 3/3/3 + D5 arrival constraint
  */
 #include "config.h"
-#if NN_MODEL_VERSION == NN_VER_A3B3L3_D5
+#if NN_MODEL_VERSION == NN_VER_A3B3L3_D5 || NN_MODEL_VERSION == NN_VER_HYBRID
 #include "nn_model_sym3_d5.h"
 /* sym3 d5 compat */
 #include "utils.h"
@@ -578,11 +578,11 @@ static void nn_forward(f32 out[2], const f32 inp[10]) {
     if (out[1] < -NN_O_MAX)       out[1] = -NN_O_MAX;
 }
 
-void nn_planner_step(f32 out[2], const car_state_t *vst,
+void nn_planner_step_d5(f32 out[2], const car_state_t *vst,
                      const waypoint_t *g1, const waypoint_t *g2, const waypoint_t *g3,
                      f32 v2, f32 v3) {
     f32 inp[10]; inp[8] = v2; inp[9] = v3;
     polar_encode(inp, vst, g1, g2, g3);
     nn_forward(out, inp);
 }
-#endif /* NN_MODEL_VERSION == NN_VER_A3B3L3_D5 */
+#endif

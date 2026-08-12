@@ -21,17 +21,19 @@
 #define NN_D_SCALE      5.0f
 #define NN_A_SCALE      3.14159265f
 
+#ifndef A_LONG_MAX
 #define A_LONG_MAX      3.0f
 #define A_BRAKE_MAX     3.0f
 #define A_LAT_MAX       3.0f
 #define V_MAX           1.5f
 #define DELTA_MAX       0.46364761f
 #define OMEGA_DELTA_MAX 14.0f
+#endif
 
 #define DELTA_ARRIVE_MAX 0.08726646f  /* 5° — D5 arrival constraint */
 
-void nn_planner_step(f32 out[2], const car_state_t *vst,
-                     const waypoint_t *g1, const waypoint_t *g2, const waypoint_t *g3,
-                     f32 v2, f32 v3);
+void nn_planner_step_d5(f32 out[2], const car_state_t *vst,
+                        const waypoint_t *g1, const waypoint_t *g2, const waypoint_t *g3,
+                        f32 v2, f32 v3);
 
 #endif

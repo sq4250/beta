@@ -292,7 +292,18 @@ static void mode3_planner_step(void) {
     for (u8 i = gn; i < 3; i++) g[i] = g[gn - 1];
     f32 v2 = (gn > 1) ? 1.0f : 0.0f;
     f32 v3 = (gn > 2) ? 1.0f : 0.0f;
+    /* 混合模型: head 是 WP → D5, 探索 → Kamm */
+#if NN_MODEL_VERSION == NN_VER_HYBRID
+    {
+        bool is_wp = false;
+        u8 head_slot = s_seq[s_seq_head];
+        for (u8 i = 0; i < s_wp_n; i++)
+            if (s_wp_pool[i] == head_slot) { is_wp = true; break; }
+        planner_forward_hybrid(&g_plan, &g_vst, &g[0], &g[1], &g[2], v2, v3, is_wp);
+    }
+#else
     planner_forward(&g_plan, &g_vst, &g[0], &g[1], &g[2], v2, v3);
+#endif
 
     /* 记录本帧 VST 位置, 供下一帧线段碰撞检测 */
     s_vst_prev_x = g_vst.x; s_vst_prev_y = g_vst.y;

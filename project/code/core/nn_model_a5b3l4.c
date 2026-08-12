@@ -7,7 +7,7 @@
  * Kamm asymmetric: a_long=5.0 a_brake=3.0 a_lat=4.0
  */
 #include "config.h"
-#if NN_MODEL_VERSION == NN_VER_A5B3L4
+#if NN_MODEL_VERSION == NN_VER_A5B3L4 || NN_MODEL_VERSION == NN_VER_HYBRID
 #include "nn_model_a5b3l4.h"
 #include "utils.h"
 #include <math.h>
@@ -594,7 +594,7 @@ static void nn_forward(f32 out[2], const f32 inp[10]) {
 
 /* ═══ Public entry — planner.c 只调这一个函数 ═══ */
 
-void nn_planner_step(f32 out[2], const car_state_t *vst,
+void nn_planner_step_kamm(f32 out[2], const car_state_t *vst,
                      const waypoint_t *g1, const waypoint_t *g2, const waypoint_t *g3,
                      f32 v2, f32 v3) {
     f32 inp[10];
