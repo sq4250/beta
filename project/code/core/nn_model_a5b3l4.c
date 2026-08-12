@@ -7,7 +7,7 @@
  * Kamm asymmetric: a_long=5.0 a_brake=3.0 a_lat=4.0
  */
 #include "config.h"
-#if NN_MODEL_VERSION == NN_VER_A5B3L4 || NN_MODEL_VERSION == NN_VER_HYBRID
+#if NN_MODEL_VERSION == NN_VER_A5B3L4
 #include "nn_model_a5b3l4.h"
 #include "model_factory.h"
 #include "utils.h"

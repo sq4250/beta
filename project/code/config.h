@@ -11,7 +11,8 @@
 #define NN_VER_A3B3L3         401   /* Sym3 3/3/3  GP-Small 3.7K */
 #define NN_VER_A3B3L3_D5      402   /* Sym3 D5 3/3/3 + |δ|<5° */
 #define NN_VER_A3B3L3_D5V15   403   /* Sym3 D5V15 3/3/3 + |δ|<5° + v<1.5 低速过点特调 */
-#define NN_VER_HYBRID         500   /* D5V15(WP) + Kamm(探索) 混合 */
+#define NN_VER_A5B3L3         404   /* Kamm 5/3/3 探索 GP-Small 3.7K */
+#define NN_VER_HYBRID         500   /* D5V15(WP) + A5B3L3(探索) 混合 */
 #define NN_MODEL_VERSION      NN_VER_HYBRID   /* 当前选用模型 */
 
 #if   NN_MODEL_VERSION == NN_VER_A5B3L4
@@ -22,9 +23,11 @@
   #include "core/nn_model_sym3_d5.h"
 #elif NN_MODEL_VERSION == NN_VER_A3B3L3_D5V15
   #include "core/nn_model_sym3_d5v15.h"
+#elif NN_MODEL_VERSION == NN_VER_A5B3L3
+  #include "core/nn_model_a5b3l3.h"
 #elif NN_MODEL_VERSION == NN_VER_HYBRID
   #include "core/nn_model_sym3_d5v15.h"  /* WP: 低速过点特调 */
-  #include "core/nn_model_a5b3l4.h"     /* 探索: Kamm 高速 */
+  #include "core/nn_model_a5b3l3.h"     /* 探索: Kamm 5/3/3 */
 #endif
 
 //===================================================车体几何===================================================

@@ -31,5 +31,6 @@ extern const model_desc_t g_model_kamm;
 extern const model_desc_t g_model_sym3;
 extern const model_desc_t g_model_d5;
 extern const model_desc_t g_model_d5v15;
+extern const model_desc_t g_model_a5b3l3;
 
 #endif
