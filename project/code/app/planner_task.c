@@ -128,33 +128,40 @@ static f32  s_vst_prev_x, s_vst_prev_y;  /* 上一规划帧的 VST 位置 */
 /* ── VST 到达检测 ── */
 #define VST_HIT_TOL  0.05f   /* VST 线段碰撞检测圆半径 [m] */
 
-/* ── 虚拟中间探索点 ──
- *   自动找 6 信标中离质心最近的点作为中心, 其余 5 个为外圈
- *   中间点: mid_i = (center + outer_i) / 2,  虚拟 ID = MID_BASE + outer_i
- *   排除规则: WP TSP 最后一个 WP 是外圈点 → 对应 mid 不进入探索池 */
-#define MID_BASE   BEACON_COUNT  /* 虚拟 ID 从 BEACON_COUNT 开始, 不碰撞真实信标 */
+/* ── 虚拟探索点 ──
+ *   自动检测中心信标:
+ *     有中心: 中心点本身无探索点, 其余外圈朝中心取中点 (BEACON_COUNT-1 个)
+ *     无中心: 每个信标朝质心取中点 (BEACON_COUNT 个)
+ *   探索点虚拟 ID = MID_BASE + 信标 i
+ *   排除规则: WP TSP 最后一个 WP 是信标 i → 对应探索点不进入探索池 */
+#define MID_BASE        BEACON_COUNT  /* 虚拟 ID 从 BEACON_COUNT 开始, 不碰撞真实信标 */
+#define CENTER_GATE_CM  50.0f         /* 信标到质心距离 < 此值 → 判定为中心信标 */
 
-static u8 s_center_id;  /* 自动检测的中心信标 */
+static bool s_has_center;  /* 是否有明显中心信标 */
+static u8   s_center_id;   /* 中心信标 slot_id (s_has_center 时有效) */
+static f32  s_cx, s_cy;    /* 信标质心 (cm, NWU) */
 
-/* 启动时调用: 找离质心最近的信标作为中心 */
+/* 启动时调用: 计算质心 + 自动检测中心信标 */
 static void midpoints_init(void) {
     f32 cx = 0, cy = 0;
     for (u8 i = 0; i < BEACON_COUNT; i++) {
         cx += BEACON_WORLD[i][0]; cy += BEACON_WORLD[i][1];
     }
     cx /= (f32)BEACON_COUNT; cy /= (f32)BEACON_COUNT;
+    s_cx = cx; s_cy = cy;
 
     u8   best = 0;
-    f32 best_d = 1e12f;
+    f32 best_d2 = 1e12f;
     for (u8 i = 0; i < BEACON_COUNT; i++) {
         f32 dx = BEACON_WORLD[i][0] - cx, dy = BEACON_WORLD[i][1] - cy;
         f32 d2 = dx * dx + dy * dy;
-        if (d2 < best_d) { best_d = d2; best = i; }
+        if (d2 < best_d2) { best_d2 = d2; best = i; }
     }
-    s_center_id = best;
+    s_has_center = (best_d2 < CENTER_GATE_CM * CENTER_GATE_CM);
+    s_center_id  = best;
 }
 
-/* 统一航点坐标查询: 真实信标 (0-5) + 虚拟中间点 (6-10) */
+/* 统一航点坐标查询: 真实信标 (0..BEACON_COUNT-1) + 探索点 (MID_BASE + i) */
 static waypoint_t waypoint_coords(u8 slot_id) {
     waypoint_t w = {slot_id, 0, 0};
     if (slot_id < BEACON_COUNT) {
@@ -163,8 +170,9 @@ static waypoint_t waypoint_coords(u8 slot_id) {
     } else {
         u8 outer = slot_id - MID_BASE;
         if (outer < BEACON_COUNT) {
-            f32 cx = BEACON_WORLD[s_center_id][0] * 0.01f;
-            f32 cy = BEACON_WORLD[s_center_id][1] * 0.01f;
+            /* 中心: 有中心信标用中心信标坐标, 否则用质心 */
+            f32 cx = (s_has_center ? BEACON_WORLD[s_center_id][0] : s_cx) * 0.01f;
+            f32 cy = (s_has_center ? BEACON_WORLD[s_center_id][1] : s_cy) * 0.01f;
             f32 ox = BEACON_WORLD[outer][0] * 0.01f;
             f32 oy = BEACON_WORLD[outer][1] * 0.01f;
             w.x = (cx + ox) * 0.5f;  w.y = (cy + oy) * 0.5f;
@@ -182,12 +190,12 @@ static bool wp_pool_remove(u8 slot_id) {
     return false;
 }
 
-/* 重建访问序列: WP 池 TSP + 中间探索点 TSP → s_seq, 重置窗口
+/* 重建访问序列: WP 池 TSP + 探索点 TSP → s_seq, 重置窗口
  *
  *  若当前 s_seq head 指向的是 WP 点 → 以该点为 WP 池 TSP 起点,
  *  保持当前目标不变; 否则正常从 VST 出发.
  *
- *  探索池 = 5 个虚拟中间点, WP TSP 末位为外圈信标时排除对应那个 */
+ *  探索池 = 探索点 (中心→信标连线取中点), WP TSP 末位为信标 i 时排除对应那个 */
 static void rebuild_sequence(void) {
     /* 重建前: 检查当前 head 是否在 WP 池中 */
     u8   anchor = 0xFF;
@@ -223,15 +231,16 @@ static void rebuild_sequence(void) {
             s_seq[s_seq_len++] = a[i].slot_id;
     }
 
-    /* Phase 2: 中间探索点 TSP
-     *   每个外圈信标对应一个虚拟中间点, ID = MID_BASE + slot_id
-     *   WP 池末位是外圈 (≠中心) → 排除对应 mid */
+    /* Phase 2: 探索点 TSP
+     *   每个真实信标对应一个探索点 = (中心 + 信标)/2, ID = MID_BASE + i
+     *   有中心信标: 中心点本身无探索点 (跳过)
+     *   WP 池末位是信标 i → 排除对应探索点 */
     u8 last_wp = (s_wp_n > 0) ? a[s_wp_n - 1].slot_id : 0xFF;
 
     u8 mids[BEACON_COUNT], mid_n = 0;
     for (u8 i = 0; i < BEACON_COUNT; i++) {
-        if (i == s_center_id) continue;                          /* 跳过中心 */
-        if (last_wp < BEACON_COUNT && i == last_wp) continue;    /* 末位外圈 → 排除 */
+        if (s_has_center && i == s_center_id) continue;          /* 有中心: 中心点无探索点 */
+        if (last_wp < BEACON_COUNT && i == last_wp) continue;    /* 末位信标 → 排除对应探索点 */
         mids[mid_n++] = MID_BASE + i;
     }
 
