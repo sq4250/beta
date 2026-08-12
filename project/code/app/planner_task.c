@@ -34,7 +34,7 @@ static void wp_remove_id(u8 id) {
  * ═══════════════════════════════════════════════════════ */
 static inline waypoint_t wp_of(const car_state_t *s) { waypoint_t w = {SLOT_HOME, s->x, s->y}; return w; }
 
-static void wp_activate(void) { g_wp_active = true; g_vst = g_car; g_car_prev = wp_of(&g_car); lateral_reset(); }
+static void wp_activate(void) { g_wp_active = true; g_car_prev = wp_of(&g_car); lateral_reset(); }
 
 static waypoint_t beacon_lookup(u8 slot_id) {
     waypoint_t w = {slot_id, 0, 0};
@@ -56,91 +56,23 @@ static void wp_load_beacons(void) {
     wp_push(&h);
 }
 
-/* ── 已访问信标集合 (MODE 3 专用) ── */
-static bool s_visited[BEACON_COUNT];
-static u8   s_visited_count;
-static u8   s_last_visited;   /* 最后一个访问的信标 slot_id */
-static bool s_auto_active;    /* 自主巡点模式 (飞机发新点后退出) */
-
-static void visited_mark(u8 slot_id) {
-    if (slot_id < BEACON_COUNT && !s_visited[slot_id]) {
-        s_visited[slot_id] = true;
-        s_visited_count++;
-    }
-}
-static void visited_clear(void) {
-    for (u8 i = 0; i < BEACON_COUNT; i++) s_visited[i] = false;
-    s_visited_count = 0;
-}
-static bool visited_all(void) { return s_visited_count >= BEACON_COUNT; }
-
-/* 加载全部未访问信标 → TSP → 推入队列 */
-static void wp_load_unvisited(void) {
-    waypoint_t all[BEACON_COUNT];
-    u8 n = 0;
-    for (u8 i = 0; i < BEACON_COUNT; i++) {
-        if (!s_visited[i]) all[n++] = beacon_lookup(i);
-    }
-    if (n > 1) {
-        tsp_solve(all, (const waypoint_t *)all, n, g_car.x, g_car.y);
-    }
-    for (u8 i = 0; i < n; i++) wp_push(&all[i]);
-}
-
 /* ═══════════════════════════════════════════════════════
  * planner_step — 路点跟随核心 (MODE 2/3/4 共用)
  * ═══════════════════════════════════════════════════════ */
 static u8 wp_take_n(waypoint_t *out, u8 n) {
     u8 k = 0;
-    for (u8 i = 0; i < wp_count() && k < n; i++) {
-        waypoint_t w = wp_peek(i);
-        if (w.slot_id < BEACON_COUNT && s_visited[w.slot_id]) continue;
-        out[k++] = w;
-    }
+    for (u8 i = 0; i < wp_count() && k < n; i++)
+        out[k++] = wp_peek(i);
     return k;
-}
-
-/* 从信标表补一个离车最近的非 visited 点 */
-static void wp_push_nearest(void) {
-    f32 best_d2 = 1e12f; u8 best_id = 0xFF;
-    for (u8 i = 0; i < BEACON_COUNT; i++) {
-        if (s_visited[i]) continue;
-        f32 dx = BEACON_WORLD[i][0] * 0.01f - g_car.x;
-        f32 dy = BEACON_WORLD[i][1] * 0.01f - g_car.y;
-        f32 d2 = dx * dx + dy * dy;
-        if (d2 < best_d2) { best_d2 = d2; best_id = i; }
-    }
-    if (best_id < BEACON_COUNT) {
-        waypoint_t w = beacon_lookup(best_id);
-        wp_push(&w);
-    }
 }
 
 static void planner_step(void) {
     waypoint_t g[3]; u8 gn = wp_take_n(g, 3);
-
-    /* 队列空 → 自主模式: 加载未访问信标; 全访问过 → 新一轮(留最后访问点) */
-    if (!gn) {
-        if (s_auto_active) {
-            if (visited_all()) { u8 last = s_last_visited; visited_clear(); visited_mark(last); }
-            wp_load_unvisited();
-            gn = wp_take_n(g, 3);
-        }
-        if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
-    }
+    if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
 
     if (check_hit_substep(g_car_prev.x, g_car_prev.y, g_car.x, g_car.y, g[0].x, g[0].y, TOL_XY)) {
-        s_last_visited = g[0].slot_id;
-        visited_mark(g[0].slot_id);
         wp_remove_id(g[0].slot_id);
         gn = wp_take_n(g, 3);
-        if (!gn) {
-            if (s_auto_active) {
-                if (visited_all()) { u8 last = s_last_visited; visited_clear(); visited_mark(last); }
-                wp_load_unvisited();
-                gn = wp_take_n(g, 3);
-            }
-        }
         if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
     }
 
@@ -167,52 +99,205 @@ static void mode2_step(const car_comm_rx_t *rx) {
 #endif
 
 /* ═══════════════════════════════════════════════════════
- * MODE 3 — 飞机引导 (收 WP 帧 → 合并+TSP → 激活)
+ * MODE 3 — 飞机引导 (WP 池 + 探索池 双池串联 + 访问序列)
+ *
+ *  规划层纯操作 VST 世界:
+ *    - 访问序列 s_seq 是访问顺序的唯一真实来源
+ *    - 到达检测基于 VST 位置 (非 car 估计量)
+ *    - 产出 g_plan → 控制层自己跟踪 VST
+ *    - 不依赖 g_car / g_car_prev / lateral_reset
+ *
+ *  WP 池:  飞机 CMD 0x30 下发, 高优先级, 增量入池触发重建
+ *  探索池: 全量信标中不在 WP 池的, 低优先级, 在 WP 池后无缝衔接
+ *  序列 = TSP(WP池, vst位置) + TSP(探索池, 末WP / vst位置)
  * ═══════════════════════════════════════════════════════ */
 #if CAR_MODE == 3
 
+/* ── WP 池 ── */
+static u8   s_wp_pool[BEACON_COUNT];
+static u8   s_wp_n;
+static u32  s_wp_seq;
+
+/* ── 访问序列 (滑动窗口) ── */
+static u8   s_seq[WP_QUEUE_SIZE];  /* 有序 slot_id */
+static u8   s_seq_head;            /* 当前窗口首 */
+static u8   s_seq_len;             /* 序列总长 */
+
+/* ── VST 线段碰撞检测 ── */
+static f32  s_vst_prev_x, s_vst_prev_y;  /* 上一规划帧的 VST 位置 */
+
+/* 探索池: 全量信标中不在 WP 池的 slot_id */
+static u8 explore_pool(u8 *out) {
+    bool in[BEACON_COUNT];
+    for (u8 i = 0; i < BEACON_COUNT; i++) in[i] = false;
+    for (u8 i = 0; i < s_wp_n; i++) in[s_wp_pool[i]] = true;
+    u8 n = 0;
+    for (u8 i = 0; i < BEACON_COUNT; i++)
+        if (!in[i]) out[n++] = i;
+    return n;
+}
+
+/* 从 WP 池中移除 slot_id, 返回是否成功移除 */
+static bool wp_pool_remove(u8 slot_id) {
+    u8 j = 0;
+    for (u8 i = 0; i < s_wp_n; i++)
+        if (s_wp_pool[i] != slot_id) s_wp_pool[j++] = s_wp_pool[i];
+    if (j < s_wp_n) { s_wp_n = j; return true; }
+    return false;
+}
+
+/* 重建访问序列: WP 池 TSP + 探索池 TSP → s_seq, 重置窗口
+ *
+ *  若当前 s_seq head 指向的是 WP 点 → 以该点为 WP 池 TSP 起点,
+ *  保持当前目标不变; 否则正常从 VST 出发. */
+static void rebuild_sequence(void) {
+    /* 重建前: 检查当前 head 是否在 WP 池中 */
+    u8   anchor = 0xFF;
+    bool anchor_is_wp = false;
+    if (s_seq_len > 0 && s_seq_head < s_seq_len) {
+        u8 slot = s_seq[s_seq_head];
+        for (u8 i = 0; i < s_wp_n; i++)
+            if (s_wp_pool[i] == slot) { anchor = slot; anchor_is_wp = true; break; }
+    }
+
+    s_seq_len   = 0;
+    s_seq_head  = 0;
+    waypoint_t a[WP_QUEUE_SIZE];
+
+    /* Phase 1: WP 池 TSP */
+    if (anchor_is_wp) {
+        /* 锚点置首, 其余 WP 从锚点出发 TSP */
+        waypoint_t awp = beacon_lookup(anchor);
+        a[0] = awp; u8 k = 1;
+        for (u8 i = 0; i < s_wp_n; i++)
+            if (s_wp_pool[i] != anchor) a[k++] = beacon_lookup(s_wp_pool[i]);
+        if (k > 2)
+            tsp_solve(&a[1], (const waypoint_t *)&a[1], k - 1, awp.x, awp.y);
+        for (u8 i = 0; i < k; i++)
+            s_seq[s_seq_len++] = a[i].slot_id;
+    } else {
+        /* 正常: 全部 WP 从 VST 出发 TSP */
+        for (u8 i = 0; i < s_wp_n; i++)
+            a[i] = beacon_lookup(s_wp_pool[i]);
+        if (s_wp_n > 1)
+            tsp_solve(a, (const waypoint_t *)a, s_wp_n, g_vst.x, g_vst.y);
+        for (u8 i = 0; i < s_wp_n; i++)
+            s_seq[s_seq_len++] = a[i].slot_id;
+    }
+
+    /* Phase 2: 探索池 TSP — 从最后一个 WP 出发 (无 WP 则从 VST) */
+    u8 ex[BEACON_COUNT];
+    u8 ex_n = explore_pool(ex);
+    if (ex_n > 0) {
+        f32 sx = (s_wp_n > 0) ? a[s_wp_n - 1].x : g_vst.x;
+        f32 sy = (s_wp_n > 0) ? a[s_wp_n - 1].y : g_vst.y;
+        for (u8 i = 0; i < ex_n; i++)
+            a[i] = beacon_lookup(ex[i]);
+        if (ex_n > 1)
+            tsp_solve(a, (const waypoint_t *)a, ex_n, sx, sy);
+        for (u8 i = 0; i < ex_n; i++)
+            s_seq[s_seq_len++] = a[i].slot_id;
+    }
+}
+
+/* MODE 3 规划步进: 访问序列 → 取 3 航点 → NN 前向 */
+static void mode3_planner_step(void) {
+    /* 从 s_seq_head 开始取最多 3 个航点 */
+    waypoint_t g[3]; u8 gn = 0;
+    for (u8 i = s_seq_head; i < s_seq_len && gn < 3; i++)
+        g[gn++] = beacon_lookup(s_seq[i]);
+
+    if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
+
+    /* VST 线段碰撞检测: s_vst_prev → g_vst 是否穿过 head 航点 */
+    waypoint_t target = beacon_lookup(s_seq[s_seq_head]);
+    if (check_hit_substep(s_vst_prev_x, s_vst_prev_y, g_vst.x, g_vst.y, target.x, target.y, TOL_XY)) {
+        u8 slot = s_seq[s_seq_head];
+        s_seq_head++;  /* 滑窗 */
+
+        /* WP 点 → 从池移除变探索点 (不追加到队尾, 下次重建时自动排入) */
+        wp_pool_remove(slot);
+
+        /* 刷新航点视图 */
+        gn = 0;
+        for (u8 i = s_seq_head; i < s_seq_len && gn < 3; i++)
+            g[gn++] = beacon_lookup(s_seq[i]);
+
+        /* 到达事件打印 */
+        printf("ARR:{%u} POOL:{", slot);
+        for (u8 i = 0; i < s_wp_n; i++) { if (i) printf(","); printf("%u", s_wp_pool[i]); }
+        printf("} SEQ:[");
+        for (u8 i = 0; i < s_seq_len; i++) {
+            if (i) printf(",");
+            if (i == s_seq_head) printf(">");
+            printf("%u", s_seq[i]);
+        }
+        printf("] WIN:[");
+        u8 wc = 0;
+        for (u8 i = s_seq_head; i < s_seq_len && wc < 3; i++, wc++) {
+            if (wc) printf(",");
+            printf("%u", s_seq[i]);
+        }
+        while (wc < 3) { if (wc) printf(","); printf("x"); wc++; }
+        printf("]\r\n");
+
+        if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
+    }
+
+    /* 门控填充: 不足 3 个航点用最后一个补齐, gate=0 表示无效 */
+    for (u8 i = gn; i < 3; i++) g[i] = g[gn - 1];
+    f32 v2 = (gn > 1) ? 1.0f : 0.0f;
+    f32 v3 = (gn > 2) ? 1.0f : 0.0f;
+    planner_forward(&g_plan, &g_vst, &g[0], &g[1], &g[2], v2, v3);
+
+    /* 记录本帧 VST 位置, 供下一帧线段碰撞检测 */
+    s_vst_prev_x = g_vst.x; s_vst_prev_y = g_vst.y;
+}
+
+/* 飞机 WP 帧合并: 增量入池 + 触发重建 */
 static void mode3_merge(const car_comm_rx_t *rx) {
+    if (rx->wp.wp_seq == s_wp_seq) return;
+    s_wp_seq = rx->wp.wp_seq;
+
     bool has_new = false;
     for (u8 i = 0; i < rx->wp.n_wp; i++) {
-        u8 sid = rx->wp.slot_ids[i];
-        waypoint_t w = beacon_lookup(sid);
         bool in = false;
-        u8 n = wp_count();
-        for (u8 j = 0; j < n; j++) { waypoint_t q = wp_peek(j); if (q.slot_id == sid) { in = true; break; } }
-        if (!in) { wp_push(&w); has_new = true; }
-    }
-    if (has_new) {
-        /* 飞机发新点 → 退出自主巡点, 重新处理飞机指令 */
-        s_auto_active = false;
-        visited_clear();
-        u8 n = wp_count();
-        if (n > 1) {
-            waypoint_t a[WP_QUEUE_SIZE]; for (u8 i = 0; i < n; i++) a[i] = wp_peek(i);
-            tsp_solve(a, (const waypoint_t *)a, n, g_car.x, g_car.y);
-            wp_clear(); for (u8 i = 0; i < n; i++) wp_push(&a[i]);
+        for (u8 j = 0; j < s_wp_n; j++)
+            if (s_wp_pool[j] == rx->wp.slot_ids[i]) { in = true; break; }
+        if (!in && s_wp_n < BEACON_COUNT) {
+            s_wp_pool[s_wp_n++] = rx->wp.slot_ids[i];
+            has_new = true;
         }
-        if (!g_wp_active) wp_activate();
+    }
+
+    if (has_new) {
+        rebuild_sequence();
+
+        /* 增点成功 → 打印飞机指令 + 增点后池 + 重建后序列 + 新窗口 */
+        printf("CMD:{");
+        for (u8 i = 0; i < rx->wp.n_wp; i++) { if (i) printf(","); printf("%u", rx->wp.slot_ids[i]); }
+        printf("} POOL:{");
+        for (u8 i = 0; i < s_wp_n; i++) { if (i) printf(","); printf("%u", s_wp_pool[i]); }
+        printf("} SEQ:[");
+        for (u8 i = 0; i < s_seq_len; i++) {
+            if (i) printf(",");
+            if (i == s_seq_head) printf(">");
+            printf("%u", s_seq[i]);
+        }
+        printf("] WIN:[");
+        u8 wc = 0;
+        for (u8 i = s_seq_head; i < s_seq_len && wc < 3; i++, wc++) {
+            if (wc) printf(",");
+            printf("%u", s_seq[i]);
+        }
+        while (wc < 3) { if (wc) printf(","); printf("x"); wc++; }
+        printf("]\r\n");
     }
 }
 
 static void mode3_step(const car_comm_rx_t *rx) {
     mode3_merge(rx);
-    if (!g_wp_active) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
-
-    planner_step();
-
-    /* 航点耗尽 */
-    if (!wp_count()) {
-        if (!s_auto_active) {
-            /* 首次耗尽 → 自主探索: 排除刚走完的点, TSP 访问剩余信标 */
-            s_auto_active = true;
-            visited_clear();
-            if (s_last_visited < BEACON_COUNT) visited_mark(s_last_visited);
-        } else {
-            /* 自主探索也救不了 → 真正没有未访问信标了, 刹车 */
-            g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0;
-        }
-    }
+    mode3_planner_step();
 }
 
 #endif

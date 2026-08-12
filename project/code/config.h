@@ -7,11 +7,17 @@
 #include "common.h"
 
 /* ── 模型 ── */
-#define NN_VER_GP_SMALL    400
-#define NN_MODEL_VERSION   NN_VER_GP_SMALL   /* GP-Small 3.7K polar + FullSim */
+#define NN_VER_A5B3L4         400   /* Kamm 5/3/4  GP-Small 3.7K */
+#define NN_VER_A3B3L3         401   /* Sym3 3/3/3  GP-Small 3.7K */
+#define NN_VER_A3B3L3_D5      402   /* Sym3 D5 3/3/3 + |δ|<5° arrival */
+#define NN_MODEL_VERSION      NN_VER_A3B3L3_D5   /* 当前选用模型 */
 
-#if   NN_MODEL_VERSION == NN_VER_GP_SMALL
-  #include "core/nn_model_gp_small.h"
+#if   NN_MODEL_VERSION == NN_VER_A5B3L4
+  #include "core/nn_model_a5b3l4.h"
+#elif NN_MODEL_VERSION == NN_VER_A3B3L3
+  #include "core/nn_model_sym3.h"
+#elif NN_MODEL_VERSION == NN_VER_A3B3L3_D5
+  #include "core/nn_model_sym3_d5.h"
 #endif
 
 //===================================================车体几何===================================================
@@ -74,7 +80,7 @@
 
 //===================================================物理约束===================================================
 /* A_LONG_MAX / A_BRAKE_MAX / A_LAT_MAX / V_MAX / DELTA_MAX / OMEGA_DELTA_MAX
-   定义在 nn_model_gp_small.h — 换模型时物理约束自动跟随 */
+   定义在模型头文件 — 换模型时物理约束自动跟随 */
 #define SERVO_DELTA_MAX    0.576f      // 舵机物理限幅 [rad] (≈30.4°, >NN训练的0.46)
 //===================================================物理约束===================================================
 

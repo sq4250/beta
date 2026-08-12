@@ -90,18 +90,19 @@ void car_control_update(void) {
     static u8 div;
     if (++div >= TRACKER_DIV) { div = 0; hal_encoder_get(&s_enc); }
 
+    /* 种子必须在 estimator 之前: 此时 car 是上一帧状态, 未被本帧更新 */
+    static bool vst_seeded = false;
+    if (!vst_seeded && div == 0) {
+        car_estimate_set_yaw_offset(wrap_pi(g_car.theta));
+        g_car.theta = 0.0f;
+        g_vst = g_car;
+        vst_seeded = true;
+        g_vst_seeded = true;
+    }
+
     car_estimate_update(&g_car, &s_imu, &s_enc, &s_cmd);
 
     if (div == 0) {
-        static bool vst_seeded = false;
-        if (!vst_seeded) {
-            car_estimate_set_yaw_offset(wrap_pi(g_car.theta));
-            g_car.theta = 0.0f;
-            g_vst = g_car;
-            vst_seeded = true;
-            g_vst_seeded = true;
-        }
-
         {
             f32 dx = g_vst.x - g_car.x, dy = g_vst.y - g_car.y;
             if (dx*dx + dy*dy > 0.05f * 0.05f) {  /* 误差>5cm 重同步 */
@@ -124,7 +125,7 @@ void task_20hz_report(void) {
 }
 
 static void task_10hz_debug(void) {
-    if (!g_vst_seeded) return;  /* INS/VST 初始化前不打印 */
+#if 1
 
     static bool hdr = true;
     if (hdr) {
@@ -144,6 +145,7 @@ static void task_10hz_debug(void) {
            (double)g_delta_fb,
            (double)g_car.v, (double)g_vst.v,
            (double)longitudinal_f_hat());
+#endif
 }
 
 static void task_1hz_heartbeat(void) { gpio_toggle_level(P23_7); }

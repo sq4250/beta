@@ -1,5 +1,5 @@
 /**
- * nn_model_gp_small.h — GP-Small 3.7K: polar_8d + GatedConcat
+ * nn_model_a5b3l4.h — GP-Small 3.7K A5B3L4 Kamm: polar_8d + GatedConcat
  *
  * Architecture:
  *   state_enc(2→8) + target_enc(2→8)×3 → concat(32D) → 48→32→16→2 ReLU

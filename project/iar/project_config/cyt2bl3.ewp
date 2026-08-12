@@ -3161,10 +3161,25 @@
                 <name>$PROJ_DIR$\..\..\code\core\lqr_gains.h</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_gp_small.c</name>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_a5b3l4.c</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_gp_small.h</name>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_a5b3l4.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_sym3.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_sym3.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_sym3_d5.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_sym3_d5.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\nn_weights.h</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\code\core\planner.c</name>
