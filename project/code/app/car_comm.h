@@ -1,5 +1,6 @@
 #pragma once
 #include "common.h"
+#include "config.h"
 
 /* 飞机→车:
  *   CMD 0x10 ACT      a_n, a_w (LEN=8,  f32×2, m/s²)
@@ -9,7 +10,7 @@
  * 车→飞机:
  *   CMD 0x20 STATUS   a_fwd, a_lat, x, y, theta (LEN=20) */
 
-#define REMOTE_WP_COUNT 6
+#define REMOTE_WP_COUNT  BEACON_COUNT
 
 typedef struct { u8 slot_ids[REMOTE_WP_COUNT]; u8 n_wp; u32 wp_seq; } remote_wp_t;
 
