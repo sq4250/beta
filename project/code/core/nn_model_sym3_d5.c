@@ -16,16 +16,20 @@
 /* ═══ Weights ═══ */
 
 static const f32 fc_state_w[16] = {
-    -0.96098506f, 0.19868471f, 0.46675169f, 0.72386271f, 1.44122624f, 0.07295464f, 0.03723657f, -0.40159103f,
-    -0.44595477f, 0.34448478f, -0.82262480f, -0.34219265f, -0.97057891f, 0.58791572f, -1.35018039f, -0.07931568f,
+    -0.19219701f, 0.42852525f, 0.09335034f, 1.56123464f,
+    0.28824525f, 0.15734933f, 0.00744731f, -0.86615572f,
+    -0.08919095f, 0.74298837f, -0.16452496f, -0.73804468f,
+    -0.19411578f, 1.26802276f, -0.27003608f, -0.17106889f,
 };
 static const f32 fc_state_b[8] = {
     0.01711749f, -0.20205592f, -0.24987824f, 0.01294586f, 0.21062309f, 0.00128588f, 0.07312730f, 0.28960988f,
 };
 
 static const f32 fc_tgt_w[16] = {
-    -1.40490150f, -1.02501869f, 1.39412725f, -0.50578642f, 1.24304235f, -0.35748890f, 0.97163969f, 0.78786457f,
-    0.74874651f, -0.51751697f, 0.57092178f, -0.70890564f, -0.40556780f, -0.62849319f, 0.36280578f, 0.24290466f,
+    -0.28098030f, -0.32627358f, 0.27882545f, -0.16099682f,
+    0.24860847f, -0.11379225f, 0.19432794f, 0.25078508f,
+    0.14974930f, -0.16473077f, 0.11418436f, -0.22565167f,
+    -0.08111356f, -0.20005560f, 0.07256116f, 0.07731895f,
 };
 static const f32 fc_tgt_b[8] = {
     -0.20179361f, 0.09117764f, -0.21409354f, -0.08863126f, -0.22592457f, -0.00936514f, 0.27565372f, -0.17760056f,
@@ -539,21 +543,21 @@ static inline void dense_relu(f32 *out, const f32 *inp, const f32 *w, const f32 
 static void polar_encode(f32 out[10], const car_state_t *s,
                          const waypoint_t *g1, const waypoint_t *g2, const waypoint_t *g3) {
     f32 dx1 = g1->x - s->x, dy1 = g1->y - s->y;
-    out[0] = s->v / NN_V_SCALE;
-    out[1] = s->delta / DELTA_MAX;
-    out[2] = sqrtf(dx1*dx1 + dy1*dy1) / NN_D_SCALE;
-    out[3] = wrap_pi(atan2f(dy1, dx1) - s->theta) / NN_A_SCALE;
+    out[0] = s->v;
+    out[1] = s->delta;
+    out[2] = sqrtf(dx1*dx1 + dy1*dy1);
+    out[3] = wrap_pi(atan2f(dy1, dx1) - s->theta);
 
     if (out[8] > 0.0f) {
         f32 dx12 = g2->x - g1->x, dy12 = g2->y - g1->y;
-        out[4] = sqrtf(dx12*dx12 + dy12*dy12) / NN_D_SCALE;
-        out[5] = wrap_pi(atan2f(dy12, dx12) - atan2f(dy1, dx1)) / NN_A_SCALE;
+        out[4] = sqrtf(dx12*dx12 + dy12*dy12);
+        out[5] = wrap_pi(atan2f(dy12, dx12) - atan2f(dy1, dx1));
     } else { out[4] = 0.0f; out[5] = 0.0f; }
 
     if (out[9] > 0.0f) {
         f32 dx23 = g3->x - g2->x, dy23 = g3->y - g2->y;
-        out[6] = sqrtf(dx23*dx23 + dy23*dy23) / NN_D_SCALE;
-        out[7] = wrap_pi(atan2f(dy23, dx23) - atan2f(g2->y - g1->y, g2->x - g1->x)) / NN_A_SCALE;
+        out[6] = sqrtf(dx23*dx23 + dy23*dy23);
+        out[7] = wrap_pi(atan2f(dy23, dx23) - atan2f(g2->y - g1->y, g2->x - g1->x));
     } else { out[6] = 0.0f; out[7] = 0.0f; }
 }
 
