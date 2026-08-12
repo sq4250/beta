@@ -27,10 +27,10 @@ void planner_forward(planner_action_t *act,
 /* ── 混合模式: D5(WP) + Kamm(探索) ── */
 #else
 
-f32 g_a_long_max  = A_LONG_MAX;   /* D5V15: 3.0 */
-f32 g_a_brake_max = A_BRAKE_MAX;  /* D5V15: 3.0 */
-f32 g_a_lat_max   = A_LAT_MAX;    /* D5V15: 3.0 */
-f32 g_v_max       = V_MAX;        /* D5V15: 1.5 */
+f32 g_a_long_max  = D5V15_A_LONG_MAX;
+f32 g_a_brake_max = D5V15_A_BRAKE_MAX;
+f32 g_a_lat_max   = D5V15_A_LAT_MAX;
+f32 g_v_max       = D5V15_V_MAX;
 
 void planner_forward_hybrid(planner_action_t *act,
                             const car_state_t *vst,
@@ -38,14 +38,16 @@ void planner_forward_hybrid(planner_action_t *act,
                             f32 v2, f32 v3, bool is_wp) {
     f32 raw[2];
     if (is_wp) {
-        /* D5V15: 低速过点特调, 对称圆 3/3/3, 1.5m/s */
-        g_a_long_max  = 3.0f; g_a_brake_max = 3.0f; g_a_lat_max = 3.0f;
-        g_v_max       = 1.5f;
+        g_a_long_max  = D5V15_A_LONG_MAX;
+        g_a_brake_max = D5V15_A_BRAKE_MAX;
+        g_a_lat_max   = D5V15_A_LAT_MAX;
+        g_v_max       = D5V15_V_MAX;
         nn_planner_step_d5v15(raw, vst, g1, g2, g3, v2, v3);
     } else {
-        /* Kamm: 非对称 5/3/4, 2.5m/s 高速探索 */
-        g_a_long_max  = 5.0f; g_a_brake_max = 3.0f; g_a_lat_max = 4.0f;
-        g_v_max       = 2.5f;
+        g_a_long_max  = KAMM_A_LONG_MAX;
+        g_a_brake_max = KAMM_A_BRAKE_MAX;
+        g_a_lat_max   = KAMM_A_LAT_MAX;
+        g_v_max       = KAMM_V_MAX;
         nn_planner_step_kamm(raw, vst, g1, g2, g3, v2, v3);
     }
     act->a     = raw[0];

@@ -31,12 +31,17 @@
 #define NN_A_SCALE      3.14159265f
 #endif
 
-/* Physical constraints (Kamm asymmetric friction ellipse) — 首次定义优先 */
+/* ── Kamm 专属物理约束 (混合模式引用) ── */
+#define KAMM_A_LONG_MAX  5.0f
+#define KAMM_A_BRAKE_MAX 3.0f
+#define KAMM_A_LAT_MAX   4.0f
+#define KAMM_V_MAX       3.0f
+
 #ifndef A_LONG_MAX
-#define A_LONG_MAX      5.0f
-#define A_BRAKE_MAX     3.0f
-#define A_LAT_MAX       4.0f
-#define V_MAX           3.0f
+#define A_LONG_MAX      KAMM_A_LONG_MAX
+#define A_BRAKE_MAX     KAMM_A_BRAKE_MAX
+#define A_LAT_MAX       KAMM_A_LAT_MAX
+#define V_MAX           KAMM_V_MAX
 #define DELTA_MAX       0.46364761f
 #define OMEGA_DELTA_MAX 14.0f
 #endif

@@ -125,6 +125,9 @@ static u8   s_seq_len;             /* 序列总长 */
 /* ── VST 线段碰撞检测 ── */
 static f32  s_vst_prev_x, s_vst_prev_y;  /* 上一规划帧的 VST 位置 */
 
+/* ── VST 到达检测 ── */
+#define VST_HIT_TOL  0.05f   /* VST 线段碰撞检测圆半径 [m] */
+
 /* ── 虚拟中间探索点 ──
  *   自动找 6 信标中离质心最近的点作为中心, 其余 5 个为外圈
  *   中间点: mid_i = (center + outer_i) / 2,  虚拟 ID = MID_BASE + outer_i
@@ -255,7 +258,7 @@ static void mode3_planner_step(void) {
 
     /* VST 线段碰撞检测: s_vst_prev → g_vst 是否穿过 head 航点 */
     waypoint_t target = waypoint_coords(s_seq[s_seq_head]);
-    if (check_hit_substep(s_vst_prev_x, s_vst_prev_y, g_vst.x, g_vst.y, target.x, target.y, TOL_XY)) {
+    if (check_hit_substep(s_vst_prev_x, s_vst_prev_y, g_vst.x, g_vst.y, target.x, target.y, VST_HIT_TOL)) {
         u8 slot = s_seq[s_seq_head];
         s_seq_head++;  /* 滑窗 */
 
