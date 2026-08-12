@@ -17,18 +17,8 @@
 #define NN_OUT_DIM   2
 
 /* Output clamp — 首次定义优先 */
-#ifndef NN_A_MAX
-#define NN_A_MAX        3.0f
-#define NN_A_BRAKE_MAX  3.0f
-#define NN_O_MAX        14.0f
-#endif
 
 /* Input normalization */
-#ifndef NN_V_SCALE
-#define NN_V_SCALE      5.0f
-#define NN_D_SCALE      5.0f
-#define NN_A_SCALE      3.14159265f
-#endif
 
 /* Physical constraints — 运行时由 model_desc_t 提供 */
 
