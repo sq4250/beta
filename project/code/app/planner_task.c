@@ -65,16 +65,12 @@ static u8 wp_take_n(waypoint_t *out, u8 n) {
 
 static void planner_step(void) {
     waypoint_t g[3]; u8 gn = wp_take_n(g, 3);
-    if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; g_target_is_wp = false; return; }
-
-    /* 更新当前目标 (供 200Hz 控制步实时判断关油门); MODE 2/4 航点都是真实信标 */
-    g_target = g[0];
-    g_target_is_wp = true;
+    if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
 
     if (check_hit_substep(g_car_prev.x, g_car_prev.y, g_car.x, g_car.y, g[0].x, g[0].y, TOL_XY)) {
         wp_remove_id(g[0].slot_id);
         gn = wp_take_n(g, 3);
-        if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; g_target_is_wp = false; return; }
+        if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
     }
 
     for (u8 i = gn; i < 3; i++) g[i] = g[gn - 1];
@@ -95,7 +91,7 @@ static void mode2_init(void) { wp_activate(); }
 
 static void mode2_step(const car_comm_rx_t *rx) {
     (void)rx;
-    if (!g_wp_active) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; g_target_is_wp = false; return; }
+    if (!g_wp_active) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
     planner_step();
 }
 
@@ -310,14 +306,10 @@ static void mode3_planner_step(void) {
     for (u8 i = s_seq_head; i < s_seq_len && gn < 3; i++)
         g[gn++] = waypoint_coords(s_seq[i]);
 
-    if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; g_target_is_wp = false; return; }
+    if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
 
     u8   cur_slot  = s_seq[s_seq_head];
     bool cur_is_wp = (cur_slot < BEACON_COUNT);   /* <7=真实信标(WP), >=7=探索点 */
-
-    /* 更新当前目标 (供 200Hz 控制步实时判断关油门) */
-    g_target = waypoint_coords(cur_slot);
-    g_target_is_wp = cur_is_wp;
 
     /* VST 到达检测: WP 点 5cm 圆, 探索点 15cm 圆 */
     waypoint_t target = waypoint_coords(cur_slot);
@@ -352,7 +344,7 @@ static void mode3_planner_step(void) {
         while (wc < 3) { if (wc) printf(","); printf("x"); wc++; }
         printf("]\r\n");
 
-        if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; g_target_is_wp = false; return; }
+        if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
     }
 
     /* 门控填充: 不足 3 个航点用最后一个补齐, gate=0 表示无效 */
@@ -436,7 +428,7 @@ static void mode4_step(const car_comm_rx_t *rx) {
         s_stop_s = rx->stop_seq; wp_clear();
         wp_load_beacons();
         g_wp_active = false; g_car_prev = wp_of(&g_car); lateral_reset();
-        g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; g_target_is_wp = false;
+        g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0;
     }
     if (rx->start_seq != s_start_s) {
         s_start_s = rx->start_seq;
@@ -467,7 +459,7 @@ static const struct {
 };
 
 void planner_init(void) {
-    wp_clear(); g_wp_active = false; g_target_is_wp = false;
+    wp_clear(); g_wp_active = false;
     g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0;
 #if CAR_MODE == 3
     midpoints_init();

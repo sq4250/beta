@@ -19,8 +19,6 @@ car_state_t      g_car, g_vst;
 planner_action_t g_plan;
 waypoint_t      g_car_prev;
 bool          g_wp_active;
-waypoint_t    g_target;
-bool          g_target_is_wp;
 f32           g_ey, g_ex, g_delta_fb;
 bool          g_vst_seeded;
 volatile u32  g_ms;
@@ -59,11 +57,12 @@ static void tracking(actuator_cmd_t *cmd, car_state_t *vst, const car_state_t *c
 
     /* LADRC 纵向: 用物理层有效加速度做前馈 */
     f32 thr_l, thr_r;
-    /* 关油门: 当前目标是 WP 点 且 car 在 10cm 圆内 (200Hz 实时判断) */
-    bool arrived = g_target_is_wp;
-    if (arrived) {
-        f32 dx = car->x - g_target.x, dy = car->y - g_target.y;
-        arrived = (dx * dx + dy * dy < TOL_XY * TOL_XY);
+    /* 关油门: car 进入任意硬编码 WP 点 10cm 范围 (路过也算, 防凸起打滑; 探索点无凸起不参与) */
+    bool arrived = false;
+    for (u8 i = 0; i < BEACON_COUNT; i++) {
+        f32 dx = car->x - BEACON_WORLD[i][0] * 0.01f;
+        f32 dy = car->y - BEACON_WORLD[i][1] * 0.01f;
+        if (dx * dx + dy * dy < TOL_XY * TOL_XY) { arrived = true; break; }
     }
     longitudinal_step(&thr_l, &thr_r, car->v, vst->v, a_eff, ex, car->delta, arrived);
     cmd->motor_l = thr_l;
