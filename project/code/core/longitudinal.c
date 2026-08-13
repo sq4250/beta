@@ -26,7 +26,8 @@ void longitudinal_init(void) {
 }
 
 void longitudinal_step(f32 *thr_l, f32 *thr_r,
-                       f32 v_meas, f32 v_ref, f32 a_ref, f32 e_x, f32 delta
+                       f32 v_meas, f32 v_ref, f32 a_ref, f32 e_x, f32 delta,
+                       bool arrived
     ) {
 
     // ── 降阶 LESO: 仅观测扰动 f̂ ──
@@ -39,9 +40,14 @@ void longitudinal_step(f32 *thr_l, f32 *thr_r,
     else if (g_f_hat < -LONG_FHAT_MAX)  { g_f_hat = -LONG_FHAT_MAX;  g_z = -LONG_FHAT_MAX - LONG_WO * v_meas; }
 
     // ── PD 控制律 (v_meas 已滤波, 来自观测层) ──
-    f32 u0 = LONG_KP * e_x + LONG_KD * (v_ref - v_meas) + a_ref + LONG_ALPHA * v_meas - g_f_hat;
-    f32 thr = clamp(u0 * g_inv_b0, -1.0f, 1.0f);
-    g_u_prev = thr;
+    f32 thr;
+    if (arrived) {
+        thr = 0.0f;   /* 到达 WP: 电压 0 滑行 */
+    } else {
+        f32 u0 = LONG_KP * e_x + LONG_KD * (v_ref - v_meas) + a_ref + LONG_ALPHA * v_meas - g_f_hat;
+        thr = clamp(u0 * g_inv_b0, -1.0f, 1.0f);
+    }
+    g_u_prev = thr;   /* 告知 LESO: 本拍实际油门 (arrived 时为 0) */
 
     // ── 阿克曼差速 ──
     f32 abs_d = delta; if (abs_d < 0.0f) abs_d = -abs_d;

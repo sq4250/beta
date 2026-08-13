@@ -65,12 +65,16 @@ static u8 wp_take_n(waypoint_t *out, u8 n) {
 
 static void planner_step(void) {
     waypoint_t g[3]; u8 gn = wp_take_n(g, 3);
-    if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
+    if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; g_target_is_wp = false; return; }
+
+    /* 更新当前目标 (供 200Hz 控制步实时判断关油门); MODE 2/4 航点都是真实信标 */
+    g_target = g[0];
+    g_target_is_wp = true;
 
     if (check_hit_substep(g_car_prev.x, g_car_prev.y, g_car.x, g_car.y, g[0].x, g[0].y, TOL_XY)) {
         wp_remove_id(g[0].slot_id);
         gn = wp_take_n(g, 3);
-        if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
+        if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; g_target_is_wp = false; return; }
     }
 
     for (u8 i = gn; i < 3; i++) g[i] = g[gn - 1];
@@ -91,7 +95,7 @@ static void mode2_init(void) { wp_activate(); }
 
 static void mode2_step(const car_comm_rx_t *rx) {
     (void)rx;
-    if (!g_wp_active) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
+    if (!g_wp_active) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; g_target_is_wp = false; return; }
     planner_step();
 }
 
@@ -126,56 +130,88 @@ static u8   s_seq_len;             /* 序列总长 */
 static f32  s_vst_prev_x, s_vst_prev_y;  /* 上一规划帧的 VST 位置 */
 
 /* ── VST 到达检测 ── */
-#define VST_HIT_TOL  0.05f   /* VST 线段碰撞检测圆半径 [m] */
+#define VST_HIT_TOL      0.05f   /* WP 点到达圆半径 [m] */
+#define EXPLORE_HIT_TOL  0.15f   /* 探索点到达圆半径 [m] */
 
 /* ── 虚拟探索点 ──
- *   自动检测中心信标:
- *     有中心: 中心点本身无探索点, 其余外圈朝中心取中点 (BEACON_COUNT-1 个)
- *     无中心: 每个信标朝质心取中点 (BEACON_COUNT 个)
- *   探索点虚拟 ID = MID_BASE + 信标 i
- *   排除规则: WP TSP 最后一个 WP 是信标 i → 对应探索点不进入探索池 */
-#define MID_BASE        BEACON_COUNT  /* 虚拟 ID 从 BEACON_COUNT 开始, 不碰撞真实信标 */
-#define CENTER_GATE_CM  50.0f         /* 信标到质心距离 < 此值 → 判定为中心信标 */
+ *   凸包: 以信标为顶点, 计算包围所有信标的凸包顶点
+ *   探索点: 每个凸包顶点与凸包中心(顶点质心)的中点, 虚拟 ID = MID_BASE + 顶点 slot_id
+ *   排除规则: WP TSP 末尾 WP → 排除离它最近的探索点 */
+#define MID_BASE   BEACON_COUNT  /* 虚拟 ID 从 BEACON_COUNT 开始, 不碰撞真实信标 */
 
-static bool s_has_center;  /* 是否有明显中心信标 */
-static u8   s_center_id;   /* 中心信标 slot_id (s_has_center 时有效) */
-static f32  s_cx, s_cy;    /* 信标质心 (cm, NWU) */
+static u8  s_hull[BEACON_COUNT];   /* 凸包顶点 slot_id (逆时针) */
+static u8  s_hull_n;               /* 凸包顶点数 */
+static f32 s_mid[BEACON_COUNT][2]; /* 探索点坐标 (m), 索引 = 凸包顶点 slot_id */
 
-/* 启动时调用: 计算质心 + 自动检测中心信标 */
-static void midpoints_init(void) {
-    f32 cx = 0, cy = 0;
-    for (u8 i = 0; i < BEACON_COUNT; i++) {
-        cx += BEACON_WORLD[i][0]; cy += BEACON_WORLD[i][1];
-    }
-    cx /= (f32)BEACON_COUNT; cy /= (f32)BEACON_COUNT;
-    s_cx = cx; s_cy = cy;
-
-    u8   best = 0;
-    f32 best_d2 = 1e12f;
-    for (u8 i = 0; i < BEACON_COUNT; i++) {
-        f32 dx = BEACON_WORLD[i][0] - cx, dy = BEACON_WORLD[i][1] - cy;
-        f32 d2 = dx * dx + dy * dy;
-        if (d2 < best_d2) { best_d2 = d2; best = i; }
-    }
-    s_has_center = (best_d2 < CENTER_GATE_CM * CENTER_GATE_CM);
-    s_center_id  = best;
+/* 二维叉积: (b-a)×(c-a) 的 z 分量 */
+static f32 cross2(f32 ax, f32 ay, f32 bx, f32 by, f32 cx, f32 cy) {
+    return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
 }
 
-/* 统一航点坐标查询: 真实信标 (0..BEACON_COUNT-1) + 探索点 (MID_BASE + i) */
+/* 凸包顶点 (Andrew monotone chain), 返回顶点数, hull 存顶点 slot_id (逆时针) */
+static u8 convex_hull(u8 *hull) {
+    u8 idx[BEACON_COUNT];
+    for (u8 i = 0; i < BEACON_COUNT; i++) idx[i] = i;
+
+    /* 按 x 升序 (x 同按 y) — 插入排序, 点少足够 */
+    for (u8 i = 1; i < BEACON_COUNT; i++) {
+        u8 j = i;
+        while (j > 0) {
+            f32 ax = BEACON_WORLD[idx[j-1]][0], ay = BEACON_WORLD[idx[j-1]][1];
+            f32 bx = BEACON_WORLD[idx[j]][0],   by = BEACON_WORLD[idx[j]][1];
+            if (ax < bx || (ax == bx && ay < by)) break;
+            u8 t = idx[j-1]; idx[j-1] = idx[j]; idx[j] = t;
+            j--;
+        }
+    }
+
+    /* 下凸包 + 上凸包 */
+    u8 m = 0;
+    for (u8 i = 0; i < BEACON_COUNT; i++) {
+        while (m >= 2 && cross2(BEACON_WORLD[hull[m-2]][0], BEACON_WORLD[hull[m-2]][1],
+                                BEACON_WORLD[hull[m-1]][0], BEACON_WORLD[hull[m-1]][1],
+                                BEACON_WORLD[idx[i]][0],   BEACON_WORLD[idx[i]][1]) <= 0.0f) m--;
+        hull[m++] = idx[i];
+    }
+    u8 lower = m + 1;
+    for (i8 i = (i8)BEACON_COUNT - 2; i >= 0; i--) {
+        while (m >= lower && cross2(BEACON_WORLD[hull[m-2]][0], BEACON_WORLD[hull[m-2]][1],
+                                    BEACON_WORLD[hull[m-1]][0], BEACON_WORLD[hull[m-1]][1],
+                                    BEACON_WORLD[idx[i]][0],   BEACON_WORLD[idx[i]][1]) <= 0.0f) m--;
+        hull[m++] = idx[i];
+    }
+    return m - 1;  /* 去掉重复的起始点 */
+}
+
+/* 启动时调用: 计算凸包顶点 + 预计算探索点坐标 */
+static void midpoints_init(void) {
+    s_hull_n = convex_hull(s_hull);
+    f32 cx = 0, cy = 0;
+    for (u8 i = 0; i < s_hull_n; i++) {
+        cx += BEACON_WORLD[s_hull[i]][0];
+        cy += BEACON_WORLD[s_hull[i]][1];
+    }
+    cx /= (f32)s_hull_n; cy /= (f32)s_hull_n;
+
+    /* 探索点 = 凸包顶点与凸包中心的中点 (米) */
+    for (u8 i = 0; i < s_hull_n; i++) {
+        u8 v = s_hull[i];
+        s_mid[v][0] = (cx + BEACON_WORLD[v][0]) * 0.5f * 0.01f;
+        s_mid[v][1] = (cy + BEACON_WORLD[v][1]) * 0.5f * 0.01f;
+    }
+}
+
+/* 统一航点坐标查询: 真实信标 (0..BEACON_COUNT-1) + 探索点 (MID_BASE + 顶点 slot_id) */
 static waypoint_t waypoint_coords(u8 slot_id) {
     waypoint_t w = {slot_id, 0, 0};
     if (slot_id < BEACON_COUNT) {
         w.x = BEACON_WORLD[slot_id][0] * 0.01f;
         w.y = BEACON_WORLD[slot_id][1] * 0.01f;
     } else {
-        u8 outer = slot_id - MID_BASE;
+        u8 outer = slot_id - MID_BASE;   /* 凸包顶点 slot_id */
         if (outer < BEACON_COUNT) {
-            /* 中心: 有中心信标用中心信标坐标, 否则用质心 */
-            f32 cx = (s_has_center ? BEACON_WORLD[s_center_id][0] : s_cx) * 0.01f;
-            f32 cy = (s_has_center ? BEACON_WORLD[s_center_id][1] : s_cy) * 0.01f;
-            f32 ox = BEACON_WORLD[outer][0] * 0.01f;
-            f32 oy = BEACON_WORLD[outer][1] * 0.01f;
-            w.x = (cx + ox) * 0.5f;  w.y = (cy + oy) * 0.5f;
+            w.x = s_mid[outer][0];
+            w.y = s_mid[outer][1];
         }
     }
     return w;
@@ -232,16 +268,27 @@ static void rebuild_sequence(void) {
     }
 
     /* Phase 2: 探索点 TSP
-     *   每个真实信标对应一个探索点 = (中心 + 信标)/2, ID = MID_BASE + i
-     *   有中心信标: 中心点本身无探索点 (跳过)
-     *   WP 池末位是信标 i → 排除对应探索点 */
+     *   探索点 = 凸包顶点与凸包中心的中点, ID = MID_BASE + 顶点 slot_id
+     *   排除离 last_wp 最近的探索点, 从 last_wp 出发 TSP */
     u8 last_wp = (s_wp_n > 0) ? a[s_wp_n - 1].slot_id : 0xFF;
 
     u8 mids[BEACON_COUNT], mid_n = 0;
-    for (u8 i = 0; i < BEACON_COUNT; i++) {
-        if (s_has_center && i == s_center_id) continue;          /* 有中心: 中心点无探索点 */
-        if (last_wp < BEACON_COUNT && i == last_wp) continue;    /* 末位信标 → 排除对应探索点 */
-        mids[mid_n++] = MID_BASE + i;
+    for (u8 i = 0; i < s_hull_n; i++)
+        mids[mid_n++] = MID_BASE + s_hull[i];
+
+    /* 排除离 last_wp 最近的探索点 */
+    if (last_wp < BEACON_COUNT && mid_n > 0) {
+        f32 lwx = a[s_wp_n - 1].x, lwy = a[s_wp_n - 1].y;
+        u8  best_j = 0;
+        f32 best_d2 = 1e12f;
+        for (u8 j = 0; j < mid_n; j++) {
+            waypoint_t mw = waypoint_coords(mids[j]);
+            f32 dx = mw.x - lwx, dy = mw.y - lwy;
+            f32 d2 = dx * dx + dy * dy;
+            if (d2 < best_d2) { best_d2 = d2; best_j = j; }
+        }
+        for (u8 j = best_j; j + 1 < mid_n; j++) mids[j] = mids[j + 1];
+        mid_n--;
     }
 
     if (mid_n > 0) {
@@ -263,12 +310,20 @@ static void mode3_planner_step(void) {
     for (u8 i = s_seq_head; i < s_seq_len && gn < 3; i++)
         g[gn++] = waypoint_coords(s_seq[i]);
 
-    if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
+    if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; g_target_is_wp = false; return; }
 
-    /* VST 线段碰撞检测: s_vst_prev → g_vst 是否穿过 head 航点 */
-    waypoint_t target = waypoint_coords(s_seq[s_seq_head]);
-    if (check_hit_substep(s_vst_prev_x, s_vst_prev_y, g_vst.x, g_vst.y, target.x, target.y, VST_HIT_TOL)) {
-        u8 slot = s_seq[s_seq_head];
+    u8   cur_slot  = s_seq[s_seq_head];
+    bool cur_is_wp = (cur_slot < BEACON_COUNT);   /* <7=真实信标(WP), >=7=探索点 */
+
+    /* 更新当前目标 (供 200Hz 控制步实时判断关油门) */
+    g_target = waypoint_coords(cur_slot);
+    g_target_is_wp = cur_is_wp;
+
+    /* VST 到达检测: WP 点 5cm 圆, 探索点 15cm 圆 */
+    waypoint_t target = waypoint_coords(cur_slot);
+    f32  hit_tol = cur_is_wp ? VST_HIT_TOL : EXPLORE_HIT_TOL;
+    if (check_hit_substep(s_vst_prev_x, s_vst_prev_y, g_vst.x, g_vst.y, target.x, target.y, hit_tol)) {
+        u8 slot = cur_slot;
         s_seq_head++;  /* 滑窗 */
 
         /* WP 点 → 从池移除变探索点 (不追加到队尾, 下次重建时自动排入) */
@@ -297,7 +352,7 @@ static void mode3_planner_step(void) {
         while (wc < 3) { if (wc) printf(","); printf("x"); wc++; }
         printf("]\r\n");
 
-        if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; return; }
+        if (!gn) { g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; g_target_is_wp = false; return; }
     }
 
     /* 门控填充: 不足 3 个航点用最后一个补齐, gate=0 表示无效 */
@@ -381,7 +436,7 @@ static void mode4_step(const car_comm_rx_t *rx) {
         s_stop_s = rx->stop_seq; wp_clear();
         wp_load_beacons();
         g_wp_active = false; g_car_prev = wp_of(&g_car); lateral_reset();
-        g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0;
+        g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0; g_target_is_wp = false;
     }
     if (rx->start_seq != s_start_s) {
         s_start_s = rx->start_seq;
@@ -412,7 +467,7 @@ static const struct {
 };
 
 void planner_init(void) {
-    wp_clear(); g_wp_active = false;
+    wp_clear(); g_wp_active = false; g_target_is_wp = false;
     g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0;
 #if CAR_MODE == 3
     midpoints_init();

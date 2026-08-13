@@ -14,8 +14,10 @@
 
 void longitudinal_init(void);
 
+/* arrived=true: 纵向电压置 0 (滑行, 非刹车), 并同步告知 LESO 本拍 u=0 */
 void longitudinal_step(f32 *thr_l, f32 *thr_r,
-                       f32 v_meas, f32 v_ref, f32 a_ref, f32 e_x, f32 delta);
+                       f32 v_meas, f32 v_ref, f32 a_ref, f32 e_x, f32 delta,
+                       bool arrived);
 
 f32  longitudinal_f_hat(void);
 

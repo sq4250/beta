@@ -21,6 +21,8 @@ extern car_state_t      g_car, g_vst;
 extern planner_action_t g_plan;
 extern waypoint_t      g_car_prev;
 extern bool          g_wp_active;
+extern waypoint_t    g_target;        /* 当前追踪目标 (米) */
+extern bool          g_target_is_wp;  /* 当前目标是否 WP 点 (真实信标) */
 extern f32           g_ey, g_ex;
 extern volatile u32  g_ms;
 
