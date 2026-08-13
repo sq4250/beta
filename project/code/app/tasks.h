@@ -28,3 +28,4 @@ void tasks_init(void);
 void car_control_update(void);
 void task_20hz_planner(void);
 void task_20hz_report(void);
+void planner_tracker_200hz(void);   /* 200Hz ISR 目标观测器 (MODE 3 视觉导航) */

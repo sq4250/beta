@@ -11,6 +11,7 @@
  *   CMD 0x20 STATUS   a_fwd, a_lat, x, y, theta (LEN=20) */
 
 #define REMOTE_WP_COUNT  BEACON_COUNT
+#define REL_MAX_N        8
 
 typedef struct { u8 slot_ids[REMOTE_WP_COUNT]; u8 n_wp; u32 wp_seq; } remote_wp_t;
 
@@ -19,6 +20,10 @@ typedef struct {
     remote_wp_t wp;
     bool start;     u32 start_seq;
     bool stop;      u32 stop_seq;
+    f32  rel_dist[REL_MAX_N];     /* CMD 0x40 */
+    f32  rel_bearing[REL_MAX_N];
+    u8   rel_n;
+    u32  rel_seq;
 } car_comm_rx_t;
 
 void          car_comm_init(void);

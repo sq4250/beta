@@ -15,7 +15,7 @@
 
 #define FRM_HDR0  0xAA
 #define FRM_HDR1  0x55
-#define BUF_MAX   32
+#define BUF_MAX   (4 + REL_MAX_N * 8 + 1)   /* 0x40 满 8 目标帧: 4 头 + 64 载荷 + 1 校验 = 69 */
 
 static volatile car_comm_rx_t s_rx;
 static u8  s_buf[BUF_MAX];
@@ -71,6 +71,15 @@ static void car_comm_feed(u8 byte) {
         case 0x30: if (dlen >= 1 && dlen <= 6) { for (u8 i = 0; i < dlen; i++) s_rx.wp.slot_ids[i] = s_buf[4 + i]; s_rx.wp.n_wp = dlen; s_rx.wp.wp_seq++; } break;
         case 0x31: if (dlen == 0)  { s_rx.start = true;                      s_rx.start_seq++; } break;
         case 0x32: if (dlen == 0)  { s_rx.stop  = true;                      s_rx.stop_seq++;  } break;
+        case 0x40: if (dlen >= 8 && dlen <= 64) {
+            u8 n = dlen / 8;
+            for (u8 i = 0; i < n; i++) {
+                rd_f32(&s_rx.rel_dist[i],    &s_buf[4 + i * 8], 1);
+                rd_f32(&s_rx.rel_bearing[i], &s_buf[8 + i * 8], 1);
+            }
+            s_rx.rel_n = n;
+            s_rx.rel_seq++;
+        } break;
         }
 
         /* 消费已解析帧, 剩余字节前移, 继续循环 */

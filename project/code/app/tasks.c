@@ -57,13 +57,15 @@ static void tracking(actuator_cmd_t *cmd, car_state_t *vst, const car_state_t *c
 
     /* LADRC 纵向: 用物理层有效加速度做前馈 */
     f32 thr_l, thr_r;
-    /* 关油门: car 进入任意硬编码 WP 点 10cm 范围 (路过也算, 防凸起打滑; 探索点无凸起不参与) */
+    /* 关油门防凸起打滑: 视觉导航的相对定位滑移无关, 已关闭 (原遍历 BEACON_WORLD 判 arrived) */
     bool arrived = false;
+#if 0
     for (u8 i = 0; i < BEACON_COUNT; i++) {
         f32 dx = car->x - BEACON_WORLD[i][0] * 0.01f;
         f32 dy = car->y - BEACON_WORLD[i][1] * 0.01f;
         if (dx * dx + dy * dy < TOL_XY * TOL_XY) { arrived = true; break; }
     }
+#endif
     longitudinal_step(&thr_l, &thr_r, car->v, vst->v, a_eff, ex, car->delta, arrived);
     cmd->motor_l = thr_l;
     cmd->motor_r = thr_r;
@@ -121,6 +123,9 @@ void car_control_update(void) {
             }
         }
         tracking(&s_cmd, &g_vst, &g_car, &g_plan, s_imu.gyro[2]);
+#if CAR_MODE == 3
+        planner_tracker_200hz();   /* 200Hz 观测器: predict + 新鲜测量 GNN + VST 到达 */
+#endif
         actuators(&s_cmd);
     }
 }

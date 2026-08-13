@@ -1,10 +1,12 @@
 #include "zf_common_headfile.h"
 #include <string.h>
+#include <math.h>
 #include "tasks.h"
 #include "car_comm.h"
 #include "core/planner.h"
 #include "core/lateral.h"
 #include "core/tsp.h"
+#include "core/target_buf.h"
 #include "utils.h"
 
 /* ═══════════════════════════════════════════════════════
@@ -112,6 +114,9 @@ static void mode2_step(const car_comm_rx_t *rx) {
  * ═══════════════════════════════════════════════════════ */
 #if CAR_MODE == 3
 
+/* 1=视觉相对导航验证(飞机下发相对方向距离), 0=原硬编码 s_seq 逻辑 */
+#define VISUAL_REL_NAV_TEST 1
+
 /* ── WP 池 ── */
 static u8   s_wp_pool[BEACON_COUNT];
 static u8   s_wp_n;
@@ -122,8 +127,10 @@ static u8   s_seq[WP_QUEUE_SIZE];  /* 有序 slot_id */
 static u8   s_seq_head;            /* 当前窗口首 */
 static u8   s_seq_len;             /* 序列总长 */
 
-/* ── VST 线段碰撞检测 ── */
+/* ── VST 线段碰撞检测 (仅硬编码 s_seq 路径用) ── */
+#if !VISUAL_REL_NAV_TEST
 static f32  s_vst_prev_x, s_vst_prev_y;  /* 上一规划帧的 VST 位置 */
+#endif
 
 /* ── VST 到达检测 ── */
 #define VST_HIT_TOL      0.05f   /* WP 点到达圆半径 [m] */
@@ -213,7 +220,8 @@ static waypoint_t waypoint_coords(u8 slot_id) {
     return w;
 }
 
-/* 从 WP 池中移除 slot_id, 返回是否成功移除 */
+/* 从 WP 池中移除 slot_id, 返回是否成功移除 (仅硬编码 s_seq 路径用) */
+#if !VISUAL_REL_NAV_TEST
 static bool wp_pool_remove(u8 slot_id) {
     u8 j = 0;
     for (u8 i = 0; i < s_wp_n; i++)
@@ -221,6 +229,7 @@ static bool wp_pool_remove(u8 slot_id) {
     if (j < s_wp_n) { s_wp_n = j; return true; }
     return false;
 }
+#endif
 
 /* 重建访问序列: WP 池 TSP + 探索点 TSP → s_seq, 重置窗口
  *
@@ -299,8 +308,53 @@ static void rebuild_sequence(void) {
     }
 }
 
-/* MODE 3 规划步进: 访问序列 → 取 3 航点 → NN 前向 */
+/* ── 200Hz 观测器 (ISR 调用): 固定频率 predict + 新鲜测量才 GNN + VST 到达降级 ──
+ *   「新鲜」= car_comm 收到新 0x40 帧 (rel_seq 变化); 一帧只消费一次 */
+void planner_tracker_200hz(void) {
+#if VISUAL_REL_NAV_TEST
+    static u32 s_rel_seq = 0;
+
+    tracker_predict();                              /* 固定 200Hz 死推 (仅 P += Q) */
+
+    car_comm_rx_t rx = car_comm_get();              /* 原子快照 (关中断) */
+    if (rx.rel_seq != s_rel_seq) {                  /* 新鲜测量 → 才进 GNN */
+        s_rel_seq = rx.rel_seq;
+        f32 zx[REL_MAX_N], zy[REL_MAX_N];
+        u8  zn = 0;
+        for (u8 i = 0; i < rx.rel_n && i < REL_MAX_N; i++) {
+            f32 dist_m = rx.rel_dist[i] * 0.01f;    /* cm → m */
+            f32 a = g_vst.theta + rx.rel_bearing[i];
+            zx[zn] = g_vst.x + dist_m * cosf(a);
+            zy[zn] = g_vst.y + dist_m * sinf(a);
+            zn++;
+        }
+        tracker_observe(zx, zy, zn, g_vst.x, g_vst.y);   /* GNN + KF + 消费(一测一用) */
+    }
+    tracker_vst(g_vst.x, g_vst.y);                  /* VST 到达降级 (200Hz 线段更细) */
+#endif
+}
+
+/* MODE 3 规划步进 (20Hz 决策): 活跃点锚点 TSP → 网络输入 */
 static void mode3_planner_step(void) {
+#if VISUAL_REL_NAV_TEST
+    /* 填网络输入 (活跃点锚点 TSP) */
+    waypoint_t g[3];
+    u8 gn = tracker_fill(g, g_vst.x, g_vst.y);
+    if (gn == 0) {
+        g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0;   /* 无目标 → 刹车 */
+    } else {
+        for (u8 i = gn; i < 3; i++) g[i] = g[gn - 1];
+        f32 v2 = (gn > 1) ? 1.0f : 0.0f;
+        f32 v3 = (gn > 2) ? 1.0f : 0.0f;
+#if NN_MODEL_VERSION == NN_VER_HYBRID
+        planner_forward_hybrid(&g_plan, &g_vst, &g[0], &g[1], &g[2], v2, v3, true);
+#else
+        planner_forward(&g_plan, &g_vst, &g[0], &g[1], &g[2], v2, v3);
+#endif
+    }
+#else
+    /* ═══ 原逻辑: 硬编码 s_seq + TSP + 到达检测 ═══ */
+
     /* 从 s_seq_head 开始取最多 3 个航点 */
     waypoint_t g[3]; u8 gn = 0;
     for (u8 i = s_seq_head; i < s_seq_len && gn < 3; i++)
@@ -366,6 +420,7 @@ static void mode3_planner_step(void) {
 
     /* 记录本帧 VST 位置, 供下一帧线段碰撞检测 */
     s_vst_prev_x = g_vst.x; s_vst_prev_y = g_vst.y;
+#endif
 }
 
 /* 飞机 WP 帧合并: 增量入池 + 触发重建 */
@@ -459,6 +514,7 @@ static const struct {
 };
 
 void planner_init(void) {
+    tracker_init();
     wp_clear(); g_wp_active = false;
     g_plan.a = -A_BRAKE_MAX; g_plan.omega = 0;
 #if CAR_MODE == 3

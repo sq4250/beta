@@ -3205,6 +3205,12 @@
             <file>
                 <name>$PROJ_DIR$\..\..\code\core\tsp.h</name>
             </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\target_buf.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\target_buf.h</name>
+            </file>
         </group>
         <group>
             <name>hal</name>
