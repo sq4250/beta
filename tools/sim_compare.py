@@ -82,6 +82,7 @@ def stat_lines(ex, ey, eth):
 def main():
     real_csv = Path(sys.argv[1]) if len(sys.argv) > 1 else REAL
     sim_csv = Path(sys.argv[2]) if len(sys.argv) > 2 else SIM
+    out = Path(sys.argv[3]) if len(sys.argv) > 3 else PROJ / 'tools' / 'sim_vs_real.png'
     t_r, vx_r, vy_r, cx_r, cy_r, vth_r, cth_r, vc_r, vv_r = load(real_csv)
     t_s, vx_s, vy_s, cx_s, cy_s, vth_s, cth_s, vc_s, vv_s = load(sim_csv)
 
@@ -150,7 +151,6 @@ def main():
                  fontsize=12, fontweight='bold', color=P, y=0.98)
     fig.subplots_adjust(right=0.76, top=0.92)
 
-    out = PROJ / 'tools' / 'sim_vs_real.png'
     fig.savefig(str(out), dpi=FIG_DPI, facecolor=BG, edgecolor='none')
     plt.close()
     print(f'Saved: {out}')

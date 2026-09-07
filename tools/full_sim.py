@@ -226,6 +226,56 @@ class CarPlant:
         s[1] += vn * np.sin(s[2]) * dt
 
 
+class TireBicyclePlant:
+    """动力学自行车模型 + 线性轮胎 (侧偏角 → 侧偏力, 带 μFz 饱和).
+
+    纵向仍为一阶阻力模型 (与 CarPlant 一致); 横向:
+      前轮侧偏角  αf = δ − atan((vy + lf·ω)/vx)
+      后轮侧偏角  αr =     − atan((vy − lr·ω)/vx)
+      侧偏力      Fy = clip(−C·α, ±μFz)
+      m·v̇y = Fyf·cosδ + Fyr − m·vx·ω
+      Iz·ω̇ = lf·Fyf·cosδ − lr·Fyr
+      θ̇ = ω,  ẋ = vx·cosθ − vy·sinθ,  ẏ = vx·sinθ + vy·cosθ
+
+    稳态转向曲率 ω/vx = δ/(L + Kus·vx²), Kus = m/L·(lr/Cf − lf/Cr)
+    (Cf=Cr 中性转向时 Kus=0 → 稳态与 kinematic 模型一致, 只多瞬态滞后+侧滑)
+
+    state 接口与 CarPlant 相同: s = [x, y, theta, vx, omega], vy 内部保存.
+    编码器量的是轮速 → vx (车身系), 侧滑导致估计里程计与真值分离 (与实车一致).
+    """
+
+    G = 9.81
+
+    def __init__(self, alpha=LONG_ALPHA, b0=LONG_B0, f0=0.0, c2=0.0,
+                 m=2.0, iz=0.01, cf=60.0, cr=60.0, mu=0.4,
+                 lf=WHEELBASE / 2, lr=WHEELBASE / 2):
+        self.alpha, self.b0 = alpha, b0
+        self.f0, self.c2 = f0, c2
+        self.m, self.iz, self.cf, self.cr, self.mu = m, iz, cf, cr, mu
+        self.lf, self.lr = lf, lr
+        self.fzf = m * self.G * lr / (lf + lr)   # 静态轴荷 (忽略载荷转移)
+        self.fzr = m * self.G * lf / (lf + lr)
+        self.vy = 0.0
+
+    def step(self, s, thr_avg, delta, dt=ISR_DT):
+        vx = s[3]
+        f = self.f0 - self.c2 * vx * abs(vx)
+        vx = max(0.0, vx + (-self.alpha * vx + self.b0 * thr_avg + f) * dt)
+        s[3] = vx
+        om = s[4]
+        vs = max(vx, 0.2)                         # 低速守卫 (α 分母)
+        af = delta - np.arctan2(self.vy + self.lf * om, vs)
+        ar = -np.arctan2(self.vy - self.lr * om, vs)
+        fyf = float(np.clip(self.cf * af, -self.mu * self.fzf, self.mu * self.fzf))
+        fyr = float(np.clip(self.cr * ar, -self.mu * self.fzr, self.mu * self.fzr))
+        cd = np.cos(delta)
+        self.vy += ((fyf * cd + fyr) / self.m - vx * om) * dt
+        s[4] += (self.lf * fyf * cd - self.lr * fyr) / self.iz * dt
+        s[2] = wrap_pi(s[2] + s[4] * dt)
+        s[0] += (vx * np.cos(s[2]) - self.vy * np.sin(s[2])) * dt
+        s[1] += (vx * np.sin(s[2]) + self.vy * np.cos(s[2])) * dt
+
+
 # ═══════════════════ 状态估计 (镜像 estimator.c) ═══════════════════
 class Estimator:
     def __init__(self):
@@ -554,6 +604,14 @@ def main():
     ap.add_argument('--c2', type=float, default=0.0, help='二次阻力系数 (v|v| 项)')
     ap.add_argument('--plant-b0', type=float, default=LONG_B0)
     ap.add_argument('--plant-alpha', type=float, default=LONG_ALPHA)
+    ap.add_argument('--tire', action='store_true',
+                    help='横向改用轮胎模型: 侧偏角+侧偏刚度+μFz 饱和 (默认 wo 一阶惯性)')
+    ap.add_argument('--m', type=float, default=2.0, help='整车质量 [kg] (--tire)')
+    ap.add_argument('--iz', type=float, default=0.01, help='横摆惯量 [kg·m²] (--tire)')
+    ap.add_argument('--cf', type=float, default=60.0, help='前轴侧偏刚度 [N/rad] (--tire)')
+    ap.add_argument('--cr', type=float, default=60.0, help='后轴侧偏刚度 [N/rad] (--tire)')
+    ap.add_argument('--mu', type=float, default=0.4,
+                    help='轮胎摩擦系数, μ·g≈侧向加速度上限 (--tire)')
     ap.add_argument('--plot', action='store_true')
     ap.add_argument('--out', type=str, default=None)
     ap.add_argument('--csv-ms', type=int, default=20,
@@ -564,8 +622,14 @@ def main():
         nn = NNPlanner(load_nn_from_pt(args.ckpt), normalize=True)
     else:
         nn = NNPlanner(load_nn_from_c())
-    plant = CarPlant(alpha=args.plant_alpha, b0=args.plant_b0,
-                     f0=args.f0, c2=args.c2)
+    if args.tire:
+        plant = TireBicyclePlant(alpha=args.plant_alpha, b0=args.plant_b0,
+                                 f0=args.f0, c2=args.c2,
+                                 m=args.m, iz=args.iz, cf=args.cf, cr=args.cr,
+                                 mu=args.mu)
+    else:
+        plant = CarPlant(alpha=args.plant_alpha, b0=args.plant_b0,
+                         f0=args.f0, c2=args.c2)
     simulate(mode=args.mode, t_max=args.t_max, nn=nn, plant=plant,
              plot=args.plot, out=args.out, csv_ms=args.csv_ms)
 
