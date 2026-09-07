@@ -498,13 +498,15 @@ def simulate(mode=2, t_max=None, nn=None, plant=None, plot=False, out=None,
     for k in range(n_isr):
         g_ms = k
 
+        # 种子在估计器之前 (与 tasks.c 一致: 用上一帧车状态)
+        if div == 0 and not vst_seeded:
+            est.seed()
+            vst[:] = est.s
+            vst_seeded = True
+
         est.update(plant_s, cmd['servo_delta'])
 
         if div == 0:
-            if not vst_seeded:
-                est.seed()
-                vst[:] = est.s
-                vst_seeded = True
             if mode == 2:
                 dx, dy = vst[0] - est.s[0], vst[1] - est.s[1]
                 if dx * dx + dy * dy > 0.05 * 0.05:   # 误差>5cm 重同步
