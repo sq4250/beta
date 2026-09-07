@@ -7,7 +7,7 @@
  * Symmetric circle 3/3/3 + D5 arrival constraint
  */
 #include "config.h"
-#if NN_MODEL_VERSION == NN_VER_A3B3L3_D5 || NN_MODEL_VERSION == NN_VER_HYBRID
+#if NN_MODEL_VERSION == NN_VER_A3B3L3_D5
 #include "nn_model_sym3_d5.h"
 #include "model_factory.h"
 #include "utils.h"

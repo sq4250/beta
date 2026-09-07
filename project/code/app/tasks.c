@@ -28,6 +28,9 @@ static actuator_cmd_t s_cmd;
 static encoder_t     s_enc;
 static imu_handle_t   s_himu;
 static bool        s_ready;
+#if CAR_MODE == 1
+static f32         s_step_rx;   /* 位置阶跃参考: 启动延迟结束后 0 → STEP_TEST_DX 单次 */
+#endif
 
 static void imu_read(imu_data_t *d, imu_handle_t h) {
     hal_imu_read_all(d->gyro, d->accel, h);
@@ -35,14 +38,26 @@ static void imu_read(imu_data_t *d, imu_handle_t h) {
     if (d->has_quat) hal_imu_read_quat(d->quat, h);
 }
 
+#if CAR_MODE == 2
 static void frame_error(f32 *ex, f32 *ey, const car_state_t *r, const car_state_t *v) {
     f32 ct = cosf(v->theta), st = sinf(v->theta);
     *ex = (v->x - r->x) * ct + (v->y - r->y) * st;
     *ey = (r->x - v->x) * st - (r->y - v->y) * ct;
 }
+#endif
 
 static void tracking(actuator_cmd_t *cmd, car_state_t *vst, const car_state_t *car,
                      const planner_action_t *plan, f32 gyro_z) {
+#if CAR_MODE == 1
+    /* ── 位置阶跃测试: 横向锁定 0°, 纵向纯位置反馈 (a_ff=v_ref=0) ──
+     * e_x = rx − ins.x 直接进 LADRC, 不经过 VST/kinematics/NN */
+    (void)vst; (void)plan; (void)gyro_z;
+    cmd->servo_delta = 0.0f;
+    f32 thr_l, thr_r;
+    longitudinal_step(&thr_l, &thr_r, car->v, 0.0f, 0.0f, s_step_rx - car->x, 0.0f, false);
+    cmd->motor_l = thr_l;
+    cmd->motor_r = thr_r;
+#else
     f32 a_eff, w_eff;
     mcu_kinematics_step(vst, plan->a, plan->omega, &a_eff, &w_eff);
 
@@ -57,16 +72,13 @@ static void tracking(actuator_cmd_t *cmd, car_state_t *vst, const car_state_t *c
 
     /* LADRC 纵向: 用物理层有效加速度做前馈 */
     f32 thr_l, thr_r;
-    /* 关油门: car 进入任意硬编码 WP 点 10cm 范围 (路过也算, 防凸起打滑; 探索点无凸起不参与) */
+    /* 补录: 关油门防凸起打滑已禁用 (平地测试无凸起, 且它是硬编码旁路,
+     * 会掩盖 NN 动作的真实跟踪效果 — 原逻辑: car 进入 WP 点 10cm 范围时 thr=0 滑行) */
     bool arrived = false;
-    for (u8 i = 0; i < BEACON_COUNT; i++) {
-        f32 dx = car->x - BEACON_WORLD[i][0] * 0.01f;
-        f32 dy = car->y - BEACON_WORLD[i][1] * 0.01f;
-        if (dx * dx + dy * dy < TOL_XY * TOL_XY) { arrived = true; break; }
-    }
     longitudinal_step(&thr_l, &thr_r, car->v, vst->v, a_eff, ex, car->delta, arrived);
     cmd->motor_l = thr_l;
     cmd->motor_r = thr_r;
+#endif
 }
 
 static void actuators(const actuator_cmd_t *cmd) {
@@ -110,6 +122,7 @@ void car_control_update(void) {
     car_estimate_update(&g_car, &s_imu, &s_enc, &s_cmd);
 
     if (div == 0) {
+#if CAR_MODE == 2
         {
             f32 dx = g_vst.x - g_car.x, dy = g_vst.y - g_car.y;
             if (dx*dx + dy*dy > 0.05f * 0.05f) {  /* 误差>5cm 重同步 */
@@ -120,19 +133,44 @@ void car_control_update(void) {
                 g_vst.delta = g_car.delta;
             }
         }
+#endif /* MODE 1 阶跃测试: 不重同步 */
+#if CAR_MODE == 1
+        /* 位置阶跃: 启动延迟结束后 rx 0 → STEP_TEST_DX, 仅一次 */
+        if (s_step_rx == 0.0f && g_ms >= STARTUP_DELAY_MS) s_step_rx = STEP_TEST_DX;
+#endif
         tracking(&s_cmd, &g_vst, &g_car, &g_plan, s_imu.gyro[2]);
         actuators(&s_cmd);
     }
 }
 
 void task_20hz_report(void) {
+#if CAR_MODE == 2
     f32 curv = tanf(g_vst.delta) * INV_WHEELBASE;
     car_comm_send(g_plan.a, g_vst.v * g_vst.v * curv,
                   g_car.x * 100.0f, g_car.y * 100.0f, g_car.theta);
+#endif /* MODE 1 阶跃测试: 不上发状态帧, 只看 CSV */
 }
 
-static void task_10hz_debug(void) {
-#if 1
+static void task_debug(void) {
+#if CAR_MODE == 1
+
+    /* ── 位置阶跃 CSV: t, 参考 rx, 实际 ins.x, 实际 ins.v, f_hat ── */
+    static bool hdr = true;
+    if (hdr) {
+        printf("#pos-step kp=%.1f kd=%.1f b0=%.1f alpha=%.1f wo=%.1f dx=%.1fm\r\n",
+               (double)LONG_KP, (double)LONG_KD, (double)LONG_B0,
+               (double)LONG_ALPHA, (double)LONG_WO, (double)STEP_TEST_DX);
+        printf("t[s],rx[m],ins_x[m],ins_v[m/s],f_hat[m/s2]\r\n");
+        hdr = false;
+    }
+    printf("%.3f,%.3f,%.3f,%.3f,%.3f\r\n",
+           (f32)g_ms * 0.001f,
+           (double)s_step_rx,
+           (double)g_car.x,
+           (double)g_car.v,
+           (double)longitudinal_f_hat());
+
+#else
 
     static bool hdr = true;
     if (hdr) {
@@ -160,6 +198,10 @@ static void task_1hz_heartbeat(void) { gpio_toggle_level(P23_7); }
 task_t tasks[TASK_NUM] = {
     {task_20hz_planner, 50, 1, 0},
     {task_20hz_report,  50, 1, 0},
-    {task_10hz_debug,  100, 1, 0},
+#if CAR_MODE == 1
+    {task_debug, STEP_CSV_PERIOD_MS, 1, 0},   /* 阶跃测试: 高频 CSV (50Hz) */
+#else
+    {task_debug,  100, 1, 0},
+#endif
     {task_1hz_heartbeat, 1000, 1, 0},
 };

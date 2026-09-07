@@ -13,12 +13,4 @@ void planner_forward(planner_action_t *act,
                      const waypoint_t *g1, const waypoint_t *g2, const waypoint_t *g3,
                      f32 v2, f32 v3);
 
-/* 混合模式: is_wp=true → D5V15, false → Kamm */
-#if NN_MODEL_VERSION == NN_VER_HYBRID
-void planner_forward_hybrid(planner_action_t *act,
-                            const car_state_t *vst,
-                            const waypoint_t *g1, const waypoint_t *g2, const waypoint_t *g3,
-                            f32 v2, f32 v3, bool is_wp);
-#endif
-
 #endif

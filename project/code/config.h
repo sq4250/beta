@@ -11,9 +11,7 @@
 #define NN_VER_A3B3L3         401   /* Sym3 3/3/3  GP-Small 3.7K */
 #define NN_VER_A3B3L3_D5      402   /* Sym3 D5 3/3/3 + |δ|<5° */
 #define NN_VER_A3B3L3_D5V15   403   /* Sym3 D5V15 3/3/3 + |δ|<5° + v<1.5 低速过点特调 */
-#define NN_VER_A5B3L3         404   /* Kamm 5/3/3 探索 GP-Small 3.7K */
-#define NN_VER_HYBRID         500   /* D5V15(WP) + A5B3L3(探索) 混合 */
-#define NN_MODEL_VERSION      NN_VER_HYBRID   /* 当前选用模型 */
+#define NN_MODEL_VERSION      NN_VER_A5B3L4   /* 补录: Kamm 快车, 平地跟踪测试 (v_max=5) */
 
 #if   NN_MODEL_VERSION == NN_VER_A5B3L4
   #include "core/nn_model_a5b3l4.h"
@@ -23,11 +21,6 @@
   #include "core/nn_model_sym3_d5.h"
 #elif NN_MODEL_VERSION == NN_VER_A3B3L3_D5V15
   #include "core/nn_model_sym3_d5v15.h"
-#elif NN_MODEL_VERSION == NN_VER_A5B3L3
-  #include "core/nn_model_a5b3l3.h"
-#elif NN_MODEL_VERSION == NN_VER_HYBRID
-  #include "core/nn_model_sym3_d5v15.h"  /* WP: 低速过点特调 */
-  #include "core/nn_model_a5b3l3.h"     /* 探索: Kamm 5/3/3 */
 #endif
 
 //===================================================车体几何===================================================
@@ -58,6 +51,11 @@
 #define STARTUP_DELAY_MS   2000       // 启动延迟 [ms], IMU 零偏稳定 + 传感器自检
 //===================================================启动延迟===================================================
 
+//===================================================补录: 位置阶跃测试 (CAR_MODE 1)===================================================
+#define STEP_TEST_DX        1.2f      // 位置阶跃幅值 [m], 启动延迟结束后 rx 0→DX 单次
+#define STEP_CSV_PERIOD_MS  20        // 阶跃 CSV 打印周期 [ms] (20=50Hz, 115200 波特约 2.3KB/s)
+//===================================================补录: 位置阶跃测试===================================================
+
 //===================================================控制器频率===================================================
 // ISR 1kHz (硬件定时器), 跟踪=编码器=200Hz (1k/5), 规划=20Hz
 #define ISR_FREQ           1000       // ISR 频率 [Hz] (硬件)
@@ -74,13 +72,11 @@
 /* ── 航点队列 ── */
 #define WP_QUEUE_SIZE      16         // 环形缓冲槽数 (须为 2 的幂)
 
-/* ── 模式: 1=DIRECT  2=FULL_AUTO  3=REMOTE_WP  4=AUTO_START ── */
-#define CAR_MODE           3          // ← 改这里切模式
+/* ── 模式 (补录分支: 仅 1/2, 飞机交互已剥离) ── */
+#define CAR_MODE           2          // ← 改这里切模式 (1=位置阶跃测试, 2=6航点自跑)
 /*
- * 1 DIRECT     飞机 CMD 0x10 直驱加速度, 不跑 NN
- * 2 FULL_AUTO  本地航点 TSP 排序 → wp_queue → 上电自跑
- * 3 REMOTE_WP  飞机 CMD 0x30 下发航点 → wp_queue → CMD 0x31 启动
- * 4 AUTO_START 本地航点 TSP 排序 → wp_queue → CMD 0x31 启动
+ * 1 STEP_TEST  位置阶跃测试: 横向锁 0°, rx 上电后 0→1m 单次, 纯 kp·e_x 反馈 (逻辑在 tasks.c)
+ * 2 FULL_AUTO  本地 6 航点 TSP 排序 → wp_queue → 上电自跑
  */
 
 /* ── 本地航点 (MODE 2 用, 世界 NWU [m]) ── */
@@ -116,11 +112,11 @@
 //===================================================速度滤波===================================================
 
 //===================================================信标世界坐标 (共享飞机)===================================================
-#define BEACON_COUNT  7
+/* 补录: 恢复当年 6 点坐标 (主线为 7 点新坐标, 见 feat/gated-controller) */
+#define BEACON_COUNT  6
 static const f32 BEACON_WORLD[BEACON_COUNT][2] = {
-    {152.0f,  150.0f}, {344.5f, 143.0f}, {456.5f,   9.5f},
-    {370.0f, -148.0f}, {506.0f, -242.0f}, {167.0f, -114.0f},
-    { 43.0f, -216.0f},
+    {171.5f,  81.5f}, {344.5f, 143.0f}, {456.5f,   9.5f},
+    {370.0f,-148.0f}, {191.0f,-109.0f}, {296.5f,  -7.5f},
 };
 //===================================================信标世界坐标===================================================
 

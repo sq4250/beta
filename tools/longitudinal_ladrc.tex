@@ -1,0 +1,145 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[UTF8]{ctex}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\usepackage{booktabs}
+\geometry{margin=2.5cm}
+
+\title{纵向控制器（降阶 LADRC）推导}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{被控对象模型（一阶阻力模型）}
+
+忽略电感瞬态（$L/R \ll$ 机械时间常数），仅用电压平衡与牛顿方程：
+
+\begin{align}
+V &= R\,i + \frac{nK_e}{r}\,v \qquad \text{（电阻压降 + 反电动势）} \\
+m\,\dot v &= \frac{nK_t}{r}\,i - b\,v \qquad \text{（车轮驱动力 $-$ 阻力）}
+\end{align}
+
+消去 $i$，归一化油门 $u = V/V_{\max}$：
+
+\begin{equation}
+\dot v = -\alpha\,v + b_0\,u,
+\qquad
+\alpha = \frac{n^2K_eK_t/r^2R + b}{m},
+\quad
+b_0 = \frac{nK_t}{m\,r\,R}\,V_{\max}
+\end{equation}
+
+将坡度、摩擦残余、建模误差合并为总扰动 $f$：
+
+\begin{equation}
+\boxed{\dot v = -\alpha\,v + b_0\,u + f}
+\end{equation}
+
+稳态特性 $v_{ss} = (b_0/\alpha)\,u$，$b_0/\alpha$ 由阶跃响应上升沿直接拟合，
+不依赖 $m,K_e,K_t,R$ 的精确测量。
+
+\section{降阶 LESO（仅观测扰动）}
+
+$v$ 已由编码器测得，全阶观测冗余；仅估计 $f$。分段常值假设 $\dot f \approx 0$。
+
+由模型反解 $f = \dot v + \alpha v - b_0 u$，构造观测器：
+
+\begin{equation}
+\dot{\hat f} = w_o\,(f - \hat f) = w_o\,(\dot v + \alpha v - b_0 u - \hat f)
+\end{equation}
+
+消去 $\dot v$：令 $z = \hat f - w_o v$，
+
+\begin{equation}
+\dot z = \dot{\hat f} - w_o\,\dot v = -w_o\,\big(z + (w_o-\alpha)\,v + b_0\,u\big)
+\end{equation}
+
+\begin{equation}
+\hat f = z + w_o\,v,
+\qquad
+z_{k+1} = z_k + \dot z\,\Delta t
+\end{equation}
+
+观测误差 $\tilde f = f - \hat f$ 的动态：
+
+\begin{equation}
+\dot{\tilde f} = -w_o\,\tilde f + \dot f \;\xrightarrow{\;\dot f\approx 0\;}\; \tilde f \to 0
+\end{equation}
+
+\section{控制律}
+
+期望闭环为二阶误差动态：
+
+\begin{equation}
+\ddot e_x + k_d\,\dot e_x + k_p\,e_x = 0,
+\qquad
+e_x = x_{ref} - x,\;\; \dot e_x = v_{ref} - v,\;\; a_{ref} = \dot v_{ref}
+\end{equation}
+
+由模型反解：
+
+\begin{align}
+b_0\,u &= \dot v + \alpha v - f \\
+       &= \big[a_{ref} + k_d(v_{ref}-v) + k_p\,e_x\big] + \alpha v - f
+\end{align}
+
+\begin{equation}
+\boxed{u_0 = k_p\,e_x + k_d\,(v_{ref}-v) + a_{ref} + \alpha\,v - \hat f},
+\qquad
+u = \mathrm{clamp}\!\left(\frac{u_0}{b_0},\,-1,\,+1\right)
+\end{equation}
+
+扰动精确补偿（$\hat f = f$、未饱和）时闭环退化为
+$\dot v \approx a_{ref} + k_d(v_{ref}-v) + k_p\,e_x$。
+
+\section{Anti-windup：观测器输入用实际执行量}
+
+观测器输入取上一拍\textbf{实际执行量} $u_{prev} = u$（饱和后、含到达停车时的 $0$）：
+
+\begin{equation}
+\dot z = -w_o\,\big(z + (w_o-\alpha)\,v + b_0\,u_{prev}\big)
+\end{equation}
+
+依据：若用未饱和的 $u_0/b_0$，饱和期模型输入 $\neq$ 实际输入，
+差值被 $\hat f$ 吸收产生偏置；用 $u_{prev}$ 则观测器模型与实际对象
+\textbf{输入恒一致}，$\tilde f$ 动态不受饱和影响：
+
+\begin{equation}
+\dot{\tilde f} = -w_o\,\tilde f \quad \text{（饱和前后均成立）}
+\end{equation}
+
+且控制律无积分状态（$e_x$ 直接 P，无 $\int e_x$），经典积分 windup 通路不存在；
+唯一有记忆的状态即观测器，已由 $u_{prev}$ 保持一致。
+
+\section{扰动限幅依据}
+
+$\hat f$ 钳位于 $[-F_{\max},\,0]$：
+
+\begin{itemize}
+\item \textbf{上界 0}：平地上 $f$ 为阻力（$\alpha v$ 已建模线性阻力，$f$ 为残余），
+  无坡道/外力助推 $\Rightarrow f \le 0$。$\hat f > 0$ 意味着编码器速度虚高
+  （打滑空转）或观测误收敛；若补偿（$u_0$ 中 $-\hat f$）将削减正确动力，
+  故钳 0 = 拒绝正向补偿。
+\item \textbf{下界 $-F_{\max}$}：阻力有物理上限。$\hat f < -F_{\max}$ 对应卡轮
+  （$v\approx 0$ 而油门持续）或观测发散；钳位防恢复瞬间 $-\hat f$ 补偿过冲。
+\end{itemize}
+
+钳位同时按 $\hat f = z + w_o v$ 反算 $z$，保持投影后观测器内部一致：
+
+\begin{equation}
+z \leftarrow \hat f_{clamp} - w_o\,v
+\end{equation}
+
+\section{阿克曼差速分配}
+
+\begin{align}
+u_L &= u\,\Big(1 - \frac{w}{2}\cdot\frac{\tan\delta}{L}\Big) \\
+u_R &= u\,\Big(1 + \frac{w}{2}\cdot\frac{\tan\delta}{L}\Big)
+\end{align}
+
+$|\delta| < 10^{-4}$ 时退化为 $u_L = u_R = u$。
+
+\end{document}

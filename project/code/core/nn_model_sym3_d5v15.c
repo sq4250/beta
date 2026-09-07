@@ -2,7 +2,7 @@
  * nn_model_sym3_d5v15.c — GP-Small 3.7K Sym3 D5V15: |δ|<5° & v<1.5m/s arrival
  */
 #include "config.h"
-#if NN_MODEL_VERSION == NN_VER_A3B3L3_D5V15 || NN_MODEL_VERSION == NN_VER_HYBRID
+#if NN_MODEL_VERSION == NN_VER_A3B3L3_D5V15
 #include "nn_model_sym3_d5v15.h"
 #include "model_factory.h"
 #include "utils.h"
@@ -591,4 +591,4 @@ const model_desc_t g_model_d5v15 = {
     .nn_a_brake_max = 3.0f,
     .nn_o_max      = 14.0f,
 };
-#endif /* NN_MODEL_VERSION == NN_VER_A3B3L3_D5V15 || NN_MODEL_VERSION == NN_VER_HYBRID */
+#endif /* NN_MODEL_VERSION == NN_VER_A3B3L3_D5V15 */

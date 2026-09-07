@@ -1,0 +1,85 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[UTF8]{ctex}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+
+\title{3 状态横向控制器（LQR）推导}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{误差定义（VST 系投影）}
+
+\begin{equation}
+\begin{bmatrix}e_x\\ e_y\end{bmatrix}
+= R_z(-\theta_{vst})\cdot\big(\vec p_{vst}-\vec p_{car}\big),
+\qquad
+R_z(\theta)=\begin{bmatrix}\cos\theta & -\sin\theta\\ \sin\theta & \cos\theta\end{bmatrix}
+\end{equation}
+
+\begin{align}
+e_\theta &= \mathrm{wrap}_\pi\big(\theta_{vst}-\theta_{car}\big) \\
+\dot e_\theta &= \frac{v}{L}\tan\delta_{vst} - \omega_{gyro}
+\end{align}
+
+\section{误差动力学（误差空间）}
+
+\begin{align}
+\dot e_y   &\approx v\,e_\theta \qquad \text{（小角度）} \\
+\dot e_\theta &= \dot e_\theta \\
+\ddot e_\theta &= -w_o\,\dot e_\theta - w_o\,\frac{v}{L}\,\Delta\delta
+\end{align}
+
+\section{状态空间}
+
+\begin{equation}
+x=\begin{bmatrix}e_y\\ e_\theta\\ \dot e_\theta\end{bmatrix},\quad u=\Delta\delta,\quad
+\dot x =
+\underbrace{\begin{bmatrix}
+0 & v & 0\\
+0 & 0 & 1\\
+0 & 0 & -w_o
+\end{bmatrix}}_{A}
+x +
+\underbrace{\begin{bmatrix}
+0\\0\\-w_o\frac{v}{L}
+\end{bmatrix}}_{B}
+u
+\end{equation}
+
+\section{LQR}
+
+\begin{samepage}
+
+\begin{equation}
+J=\int_0^\infty \left(x^T Q x + R u^2\right)\mathrm{d}t,
+\qquad
+Q=\mathrm{diag}(q_{ey},\,0,\,0),\quad R=r
+\end{equation}
+
+\begin{align}
+u^* &= -K_{ric}\,x \\
+K_{ric} &= R^{-1}B^T P \\
+A^T P + P A - P B R^{-1} B^T P + Q &= 0
+\end{align}
+
+\end{samepage}
+
+\section{增益表}
+
+存储约定 $K=-K_{ric}$，故 $u=+Kx$。$K(v)=\big[K_{ey}(v),\,K_{e\theta}(v),\,K_{\dot e\theta}(v)\big]$
+离线由 Riccati 方程按工作速度范围求解成表，车端二分 + 线性插值。
+
+\section{控制律}
+
+\begin{equation}
+\Delta\delta_{fb}=K_{ey}\,e_y + K_{e\theta}\,e_\theta + K_{\dot e\theta}\,\dot e_\theta,
+\qquad
+\delta_{cmd}=\mathrm{clamp}\big(\delta_{vst}+\Delta\delta_{fb}\big)
+\end{equation}
+
+\end{document}
