@@ -206,21 +206,28 @@ class CarPlant:
     """纵向一阶阻力模型 + 横向 wo 一阶惯性 + 自行车运动学.
 
     state: [x, y, theta, v, omega]
-    u: 左右油门平均; delta: 实际前轮角 (舵机视为理想).
+    u: 左右油门平均; delta: 实际前轮角 (可选一阶舵机滞后, tau_s=0 即理想).
     """
 
     def __init__(self, alpha=LONG_ALPHA, b0=LONG_B0, wo=15.0,
-                 f0=0.0, c2=0.0):
+                 f0=0.0, c2=0.0, tau_s=0.0):
         self.alpha, self.b0, self.wo = alpha, b0, wo
         self.f0, self.c2 = f0, c2
+        self.tau_s = tau_s
+        self.delta_act = 0.0
 
-    def step(self, s, thr_avg, delta, dt=ISR_DT):
+    def step(self, s, thr_avg, delta_cmd, dt=ISR_DT):
         v = s[3]
         f = self.f0 - self.c2 * v * abs(v)          # 残差扰动 (坡度/二次阻力)
         dv = (-self.alpha * v + self.b0 * thr_avg + f) * dt
         vn = max(0.0, v + dv)
         s[3] = vn
-        s[4] += self.wo * ((vn / WHEELBASE) * np.tan(delta) - s[4]) * dt
+        # 舵机一阶滞后: 真值 δ_act 追赶指令, 估计器仍用 cmd (与车端一致)
+        if self.tau_s > 0.0:
+            self.delta_act += (delta_cmd - self.delta_act) * dt / self.tau_s
+        else:
+            self.delta_act = delta_cmd
+        s[4] += self.wo * ((vn / WHEELBASE) * np.tan(self.delta_act) - s[4]) * dt
         s[2] = wrap_pi(s[2] + s[4] * dt)
         s[0] += vn * np.cos(s[2]) * dt
         s[1] += vn * np.sin(s[2]) * dt
@@ -248,7 +255,7 @@ class TireBicyclePlant:
 
     def __init__(self, alpha=LONG_ALPHA, b0=LONG_B0, f0=0.0, c2=0.0,
                  m=2.0, iz=0.01, cf=60.0, cr=60.0, mu=0.4,
-                 lf=WHEELBASE / 2, lr=WHEELBASE / 2):
+                 lf=WHEELBASE / 2, lr=WHEELBASE / 2, tau_s=0.0):
         self.alpha, self.b0 = alpha, b0
         self.f0, self.c2 = f0, c2
         self.m, self.iz, self.cf, self.cr, self.mu = m, iz, cf, cr, mu
@@ -256,13 +263,20 @@ class TireBicyclePlant:
         self.fzf = m * self.G * lr / (lf + lr)   # 静态轴荷 (忽略载荷转移)
         self.fzr = m * self.G * lf / (lf + lr)
         self.vy = 0.0
+        self.tau_s = tau_s
+        self.delta_act = 0.0
 
-    def step(self, s, thr_avg, delta, dt=ISR_DT):
+    def step(self, s, thr_avg, delta_cmd, dt=ISR_DT):
         vx = s[3]
         f = self.f0 - self.c2 * vx * abs(vx)
         vx = max(0.0, vx + (-self.alpha * vx + self.b0 * thr_avg + f) * dt)
         s[3] = vx
         om = s[4]
+        if self.tau_s > 0.0:
+            self.delta_act += (delta_cmd - self.delta_act) * dt / self.tau_s
+        else:
+            self.delta_act = delta_cmd
+        delta = self.delta_act
         vs = max(vx, 0.2)                         # 低速守卫 (α 分母)
         af = delta - np.arctan2(self.vy + self.lf * om, vs)
         ar = -np.arctan2(self.vy - self.lr * om, vs)
@@ -278,17 +292,25 @@ class TireBicyclePlant:
 
 # ═══════════════════ 状态估计 (镜像 estimator.c) ═══════════════════
 class Estimator:
-    def __init__(self):
+    def __init__(self, yaw_noise_deg=0.0, tau_n=0.05):
         self.v_filt = 0.0
         self.yaw_offset = 0.0
         self.s = np.zeros(5)  # x, y, theta, v, delta (估计值 g_car)
+        # 航向测量噪声: OU 过程 (τ_n 相关时间), 稳态 std = yaw_noise_deg
+        self.n_theta = 0.0
+        self.theta_n_std = np.deg2rad(yaw_noise_deg) if yaw_noise_deg > 0 else 0.0
+        self.tau_n = tau_n
 
     def seed(self):
         self.yaw_offset = wrap_pi(self.s[2])
         self.s[2] = 0.0
 
     def update(self, plant_s, cmd_delta, dt=ISR_DT):
-        self.s[2] = wrap_pi(plant_s[2] - self.yaw_offset)   # 四元数理想测量
+        if self.theta_n_std > 0.0:
+            self.n_theta += (-self.n_theta / self.tau_n) * dt \
+                            + self.theta_n_std * np.sqrt(2.0 * dt / self.tau_n) \
+                              * np.random.randn()
+        self.s[2] = wrap_pi(plant_s[2] - self.yaw_offset + self.n_theta)  # 四元数+噪声
         self.v_filt += SPEED_FLT_ALPHA * (plant_s[3] - self.v_filt)  # 编码器 EMA
         self.s[3] = self.v_filt
         self.s[0] += self.v_filt * np.cos(self.s[2]) * dt
@@ -445,16 +467,16 @@ class Planner:
 
 # ═══════════════════ 主仿真 ═══════════════════
 def simulate(mode=2, t_max=None, nn=None, plant=None, plot=False, out=None,
-             csv_ms=None):
+             csv_ms=None, yaw_noise=0.0, servo_tau=0.0):
     assert mode in (1, 2)
     if nn is None:
         nn = NNPlanner(load_nn_from_c())
     if plant is None:
-        plant = CarPlant()
+        plant = CarPlant(tau_s=servo_tau)
 
     vst = np.zeros(5)          # x, y, theta, v, delta
     plant_s = np.zeros(5)      # x, y, theta, v, omega
-    est = Estimator()
+    est = Estimator(yaw_noise_deg=yaw_noise)
     ladrc = LADRC()
     planner = Planner(nn)
     if mode == 2:
@@ -612,6 +634,10 @@ def main():
     ap.add_argument('--cr', type=float, default=60.0, help='后轴侧偏刚度 [N/rad] (--tire)')
     ap.add_argument('--mu', type=float, default=0.4,
                     help='轮胎摩擦系数, μ·g≈侧向加速度上限 (--tire)')
+    ap.add_argument('--yaw-noise', type=float, default=0.0,
+                    help='航向测量噪声 std [deg] (IMU 四元数抖动, OU 过程 τ=50ms)')
+    ap.add_argument('--servo-tau', type=float, default=0.0,
+                    help='舵机一阶滞后时间常数 [ms] (0=理想舵机)')
     ap.add_argument('--plot', action='store_true')
     ap.add_argument('--out', type=str, default=None)
     ap.add_argument('--csv-ms', type=int, default=20,
@@ -626,12 +652,14 @@ def main():
         plant = TireBicyclePlant(alpha=args.plant_alpha, b0=args.plant_b0,
                                  f0=args.f0, c2=args.c2,
                                  m=args.m, iz=args.iz, cf=args.cf, cr=args.cr,
-                                 mu=args.mu)
+                                 mu=args.mu, tau_s=args.servo_tau * 1e-3)
     else:
         plant = CarPlant(alpha=args.plant_alpha, b0=args.plant_b0,
-                         f0=args.f0, c2=args.c2)
+                         f0=args.f0, c2=args.c2,
+                         tau_s=args.servo_tau * 1e-3)
     simulate(mode=args.mode, t_max=args.t_max, nn=nn, plant=plant,
-             plot=args.plot, out=args.out, csv_ms=args.csv_ms)
+             plot=args.plot, out=args.out, csv_ms=args.csv_ms,
+             yaw_noise=args.yaw_noise)
 
 
 if __name__ == '__main__':
