@@ -1,0 +1,194 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[UTF8]{ctex}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+
+\title{4 状态轮胎模型（误差坐标）状态空间推导}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+本文件给出横向跟踪的 4 状态轮胎模型——动力学自行车模型配线性侧偏刚度——在误差坐标下的状态空间形式，
+作为 \texttt{lateral\_3state.tex} 中一阶惯性模型（$w_o$ 集总）的对照基准。
+
+\section{车辆模型与侧偏力}
+
+自行车模型。参数：整车质量 $m$，横摆转动惯量 $I_z$，质心到前/后轴距离 $L_f,\,L_r$，
+纵向车速 $v_x$（横向动力学中视为常值），前轮转角 $\delta$，侧滑速度 $v_y$，横摆角速度 $\omega$。
+
+轮胎侧偏力取线性刚度模型：
+\begin{equation}
+F_{yf} = C_f\,\alpha_f, \qquad F_{yr} = C_r\,\alpha_r
+\end{equation}
+
+前后轮侧偏角：
+\begin{equation}
+\alpha_f = \delta - \frac{v_y + L_f\,\omega}{v_x},
+\qquad
+\alpha_r = -\frac{v_y - L_r\,\omega}{v_x}
+\end{equation}
+
+车体动力学（横摆 + 侧滑）：
+\begin{equation}
+m\,(\dot v_y + v_x\,\omega) = F_{yf} + F_{yr},
+\qquad
+I_z\,\dot\omega = L_f F_{yf} - L_r F_{yr}
+\end{equation}
+
+\section{误差坐标}
+
+取横向误差 $e_1$ 与航向误差 $e_2 = \psi - \psi_{\text{ref}}$：
+\begin{equation}
+\dot e_1 = v_y + v_x\,e_2,
+\qquad
+\dot e_2 = \omega
+\end{equation}
+（直道参考时 $\dot\psi_{\text{ref}} = 0$。）
+
+\section{误差动力学}
+
+由 $\ddot e_1 = \dot v_y + v_x \dot\omega = (F_{yf}+F_{yr})/m$ 与 $\ddot e_2 = \dot\omega$，
+并以 $v_y = \dot e_1 - v_x e_2$、$\omega = \dot e_2$ 反代侧偏角：
+\begin{equation}
+\alpha_f = \delta - \frac{\dot e_1}{v_x} + e_2 - \frac{L_f \dot e_2}{v_x},
+\qquad
+\alpha_r = -\frac{\dot e_1}{v_x} + e_2 + \frac{L_r \dot e_2}{v_x}
+\end{equation}
+
+整理得
+\begin{align}
+\ddot e_1 &= -\frac{C_f + C_r}{m v_x}\,\dot e_1
+            + \frac{C_f + C_r}{m}\,e_2
+            - \frac{L_f C_f - L_r C_r}{m v_x}\,\dot e_2
+            + \frac{C_f}{m}\,\delta \\[4pt]
+\ddot e_2 &= -\frac{L_f C_f - L_r C_r}{I_z v_x}\,\dot e_1
+            + \frac{L_f C_f - L_r C_r}{I_z}\,e_2
+            - \frac{L_f^2 C_f + L_r^2 C_r}{I_z v_x}\,\dot e_2
+            + \frac{L_f C_f}{I_z}\,\delta
+\end{align}
+
+\section{状态空间形式}
+
+取状态 $x = [\,e_1,\ \dot e_1,\ e_2,\ \dot e_2\,]^{\mathsf T}$，输入 $u = \delta$
+（本节为直道参考，$\delta_{\text{vst}} = 0$，故 $\delta$ 即 $\Delta\delta$；
+弯曲参考下的说明见第 6 节）：
+\begin{equation}
+\dot x = A x + B u
+\end{equation}
+
+\begin{equation}
+A = \begin{bmatrix}
+0 & 1 & 0 & 0 \\[4pt]
+0 & -\dfrac{C_f + C_r}{m v_x} & \dfrac{C_f + C_r}{m} & -\dfrac{L_f C_f - L_r C_r}{m v_x} \\[10pt]
+0 & 0 & 0 & 1 \\[4pt]
+0 & -\dfrac{L_f C_f - L_r C_r}{I_z v_x} & \dfrac{L_f C_f - L_r C_r}{I_z} & -\dfrac{L_f^2 C_f + L_r^2 C_r}{I_z v_x}
+\end{bmatrix},
+\qquad
+B = \begin{bmatrix} 0 \\[4pt] \dfrac{C_f}{m} \\[10pt] 0 \\[4pt] \dfrac{L_f C_f}{I_z} \end{bmatrix}
+\end{equation}
+
+\section{中性转向下的解耦}
+
+取 $C_f = C_r = C$、$L_f = L_r = L/2$ 时 $L_f C_f - L_r C_r = 0$，
+横摆子系统与侧滑解耦，退化为两个一阶环节：
+\begin{equation}
+\ddot e_2 = -\frac{2 L_f^2 C}{I_z v_x}\,\dot e_2 + \frac{L_f C}{I_z}\,\delta
+\end{equation}
+\begin{equation}
+\ddot e_1 = -\frac{2 C}{m v_x}\,\dot e_1 + \frac{2 C}{m}\,e_2 + \frac{C}{m}\,\delta
+\end{equation}
+
+横摆通道对 $\delta$ 的传递函数：
+\begin{equation}
+\frac{\dot e_2(s)}{\delta(s)} = \frac{L_f C / I_z}{s + 2 L_f^2 C/(I_z v_x)}
+\end{equation}
+
+极点 $\;2 L_f^2 C/(I_z v_x) \propto 1/v_x$，直流增益 $\;v_x/L$。
+\textbf{极点随速度变，直流增益不变}——这是与惯性模型对照的关键。
+
+\section{参考轨迹与输入量的含义}
+
+第 2--4 节的推导以\textbf{直道参考}为背景（$\dot\psi_{\text{ref}} = 0$），此时参考自身的前轮转角
+$\delta_{\text{vst}} = 0$，故绝对转角 $\delta$ 与相对量 $\Delta\delta \equiv \delta - \delta_{\text{vst}}$
+在数值上一致。但实际系统跟踪的 vst 是一个\textbf{运动学模型}（无侧滑、无轮胎滞后），
+沿网络规划的路径行驶，其前轮转角 $\delta_{\text{vst}}$ 与横摆角速度满足
+\begin{equation}
+\omega_{\text{vst}} = \frac{v_x}{L}\tan\delta_{\text{vst}}
+\end{equation}
+
+把 $\omega_{\text{car}} = \omega_{\text{vst}} + \Delta\omega$、$\delta_{\text{car}} = \delta_{\text{vst}} + \Delta\delta$
+代入车体动力学（此处保留绝对量，不作 $\dot e_1$ 代换）：
+\begin{equation}
+\dot\omega_{\text{car}} = -\frac{L_f^2 C_f + L_r^2 C_r}{I_z v_x}\,\omega_{\text{car}}
+                        - \frac{L_f C_f - L_r C_r}{I_z v_x}\,v_y
+                        + \frac{L_f C_f}{I_z}\,\delta_{\text{car}}
+\end{equation}
+
+可见参考量 $\delta_{\text{vst}},\,\omega_{\text{vst}}$ 以\textbf{常值偏置}的形式进入。
+稳态（$\dot\omega_{\text{car}} = 0$、$\Delta\omega_{ss} = 0$）下，令偏置项抵消即得所需稳态转角偏置：
+\begin{equation}
+\Delta\delta_{ss} = \frac{1}{L_f C_f / I_z}
+\left[\frac{L_f^2 C_f + L_r^2 C_r}{I_z v_x}\,\omega_{\text{vst}} - \frac{L_f C_f}{I_z}\,\delta_{\text{vst}}\right]
+\end{equation}
+
+在中性转向（$C_f = C_r = C$，$L_f = L_r = L/2$）下，代入 $\omega_{\text{vst}} = (v_x / L)\delta_{\text{vst}}$：
+\begin{equation}
+\frac{L_f^2 C_f + L_r^2 C_r}{I_z v_x}\,\omega_{\text{vst}}
+= \frac{2 L_f^2 C}{I_z v_x}\cdot\frac{v_x}{L}\delta_{\text{vst}}
+= \frac{L C}{2 I_z}\,\delta_{\text{vst}}
+= \frac{L_f C_f}{I_z}\,\delta_{\text{vst}}
+\;\Longrightarrow\;
+\Delta\delta_{ss} = 0
+\end{equation}
+
+即参考曲率对应的横摆阻尼力矩与参考转角对应的横摆驱动力矩\textbf{精确相等}，
+跟踪该运动学参考不需要额外的稳态转角偏置。
+因此误差动力学与直道情形形式相同，\textbf{输入即 $\Delta\delta$}——这也是 vst 可作为跟踪参考的前提。
+
+对应的舵机指令为
+\begin{equation}
+\delta_{\text{cmd}} = \mathrm{clamp}\big(\delta_{\text{vst}} + \Delta\delta_{fb}\big)
+\end{equation}
+与固件 \texttt{tasks.c} 一致：模型中的输入是 $\Delta\delta$，而作用在舵机上的最终量是 $\delta_{\text{vst}} + \Delta\delta$。
+
+\section{符号约定（本队口径）}
+
+上式采用标准文献约定：$e_1 = $ 车 $-$ 路径、$e_2 = \psi_{\text{car}} - \psi_{\text{des}}$，
+$\delta > 0$ 增大误差。
+
+本队取 $e_y = $ vst $-$ car、$e_\theta = \theta_{\text{vst}} - \theta_{\text{car}}$，
+正 $\Delta\delta$ 应当减小误差，即作代换 $x \to -x$。
+$A$ 的线性齐次项在该代换下不变，\textbf{只有 $B$ 整体变号}：
+\begin{equation}
+B \to -\begin{bmatrix} 0 & \dfrac{C_f}{m} & 0 & \dfrac{L_f C_f}{I_z} \end{bmatrix}^{\mathsf T}
+\end{equation}
+
+漏掉此负号，闭环将出现正实部极点。
+
+\section{与惯性模型（\texttt{lateral\_3state.tex}）对照}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+ & 轮胎模型 & 惯性模型 \\
+\midrule
+状态 & $[e_1,\ \dot e_1,\ e_2,\ \dot e_2]$ & $[e_y,\ e_\theta,\ \dot e_\theta]$ \\
+横摆极点 & $2 L_f^2 C/(I_z v_x)$，$\propto 1/v_x$ & $w_o$，常数 \\
+直流增益 & $v_x / L$ & $v_x / L$ \\
+侧滑自由度 & 有（$\dot e_1$ 为独立状态） & 无（$\dot e_1 = v_x e_\theta$ 代数绑定） \\
+控制输入 & $\Delta\delta$ & $\Delta\delta$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+即：\textbf{惯性模型相当于把轮胎模型的两个极点合并为一个常数极点，并去掉侧滑状态。}
+两者仅在 $v^* = 2 L_f^2 C/(I_z w_o)$ 处极点对齐；由于直流增益相同，
+稳态精度不受模型选择影响，差异全部体现在瞬态。
+失效判据为侧滑极点与闭环带宽之比：$\gtrsim 3$ 时近似成立，降至 $2$ 以下失效。
+
+\end{document}

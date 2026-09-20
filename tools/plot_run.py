@@ -7,7 +7,10 @@ import sys, numpy as np, matplotlib; matplotlib.use('Agg'); import matplotlib.py
 from pathlib import Path
 
 PROJ = Path(__file__).resolve().parents[1]
-DATA = PROJ / 'tools' / 'run_data.csv'
+TOOLS = PROJ / 'tools'
+DATA = TOOLS / 'data'
+OUT = TOOLS / 'out'
+CSV_DEFAULT = DATA / 'run_data.csv'
 
 # 补录: 恢复当年 6 点坐标 (主线为 7 点新坐标)
 WPS = np.array([[0, 0], [1.715, 0.815], [3.445, 1.43], [4.565, 0.095],
@@ -121,7 +124,7 @@ def main(path):
     fig.suptitle(f'Run: {Path(path).name}  |  {len(t)}pts  {t[-1]:.1f}s',
                  fontsize=11, fontweight='bold', color=P, y=0.98)
 
-    out = Path(path).with_suffix('.png')
+    out = OUT / (Path(path).stem + '.png')
     fig.savefig(str(out), dpi=150, facecolor=BG, edgecolor='none'); plt.close()
     print(f'Saved: {out}')
 
@@ -135,5 +138,5 @@ def main(path):
         print(f'  delta_fb STD={np.std(delta_fb):.3f}rad max={np.max(np.abs(delta_fb)):.3f}rad')
 
 if __name__ == '__main__':
-    p = sys.argv[1] if len(sys.argv) > 1 else str(DATA)
+    p = sys.argv[1] if len(sys.argv) > 1 else str(CSV_DEFAULT)
     main(p)

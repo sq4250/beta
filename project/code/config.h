@@ -7,20 +7,16 @@
 #include "common.h"
 
 /* ── 模型 ── */
-#define NN_VER_A5B3L4         400   /* Kamm 5/3/4  GP-Small 3.7K */
-#define NN_VER_A3B3L3         401   /* Sym3 3/3/3  GP-Small 3.7K */
-#define NN_VER_A3B3L3_D5      402   /* Sym3 D5 3/3/3 + |δ|<5° */
 #define NN_VER_A3B3L3_D5V15   403   /* Sym3 D5V15 3/3/3 + |δ|<5° + v<1.5 低速过点特调 */
-#define NN_MODEL_VERSION      NN_VER_A5B3L4   /* 补录: Kamm 快车, 平地跟踪测试 (v_max=5) */
+#define NN_VER_GPMED_V4       404   /* Kamm v4  GP-Medium 9K (纯半正态分布+蒸馏) */
+#define NN_MODEL_VERSION      NN_VER_GPMED_V4   /* 当前主力: v4 分布, 长腿通过精度 2.3cm */
 
-#if   NN_MODEL_VERSION == NN_VER_A5B3L4
-  #include "core/nn_model_a5b3l4.h"
-#elif NN_MODEL_VERSION == NN_VER_A3B3L3
-  #include "core/nn_model_sym3.h"
-#elif NN_MODEL_VERSION == NN_VER_A3B3L3_D5
-  #include "core/nn_model_sym3_d5.h"
-#elif NN_MODEL_VERSION == NN_VER_A3B3L3_D5V15
+#if   NN_MODEL_VERSION == NN_VER_A3B3L3_D5V15
   #include "core/nn_model_sym3_d5v15.h"
+#elif NN_MODEL_VERSION == NN_VER_GPMED_V4
+  #include "core/nn_model_gpmed_v4.h"
+#else
+  #error "NN_MODEL_VERSION 未匹配 — 可选 NN_VER_GPMED_V4 / NN_VER_A3B3L3_D5V15"
 #endif
 
 //===================================================车体几何===================================================

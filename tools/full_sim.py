@@ -12,15 +12,17 @@ full_sim.py — β_ackerman 全闭环仿真: NN 规划器 + VST + LQR + LADRC + 
     横向:  ω̇ = wo·((v/L)·tanδ − ω),  wo=15 (LQR 设计模型, 舵机视为理想)
            θ̇ = ω,  ẋ = v·cosθ,  ẏ = v·sinθ
 
-NN 权重: 默认直接解析部署的 core/nn_model_a5b3l4.c (scale 已折叠进第一层,
-         输入为原始物理量); 也可 --ckpt runs/gp_small_kamm533.pt 加载训练
-         检查点 (未折叠, 输入需归一化 v/5, δ/DELTA_MAX, d/5, ang/π).
+NN 权重: 默认解析 core/nn_model_gpmed_v4.c (v4 Kamm GP-Medium 9K, scale 已折叠
+         进第一层, 输入为原始物理量); --c-model 可切 core/ 下其他部署模型
+         (仅剩 nn_model_sym3_d5v15.c); 也可 --ckpt <path.pt> 加载训练检查点
+         (未折叠, 输入需归一化 v/5, δ/DELTA_MAX, d/5, ang/π).
 
 用法:
   python full_sim.py --mode 2                        # 6 航点自跑 (默认)
   python full_sim.py --mode 1                        # 位置阶跃 (rx 0→1.2m)
   python full_sim.py --mode 2 --f0 -0.3              # 注入恒定扰动 (坡度)
-  python full_sim.py --mode 2 --ckpt C:/Devel/test/pipeline_kamm533/runs/gp_small_kamm533.pt
+  python full_sim.py --mode 2 --c-model nn_model_sym3_d5v15.c  # 切 d5v15
+  python full_sim.py --mode 2 --ckpt C:/Devel/test/pipeline_kamm533/runs/gpmed_v4.pt
   python full_sim.py --mode 2 --plot                 # 出 CSV 后直接画概览图
 
 输出 CSV 与车端格式完全一致 (MODE2 12 列 / MODE1 5 列),
@@ -34,7 +36,10 @@ from pathlib import Path
 import numpy as np
 
 PROJ = Path(__file__).resolve().parents[1]
+TOOLS = PROJ / 'tools'
 CODE = PROJ / 'project' / 'code'
+DATA = TOOLS / 'data'      # CSV 输入/输出
+OUT = TOOLS / 'out'        # 图/视频产物
 
 # ═══════════════════ 配置 (镜像 config.h) ═══════════════════
 WHEELBASE      = 0.15
@@ -68,10 +73,8 @@ SPEED_FLT_ALPHA = 0.03
 STEP_TEST_DX = 1.2
 # 车端 CSV 周期参考: MODE1=20ms(50Hz), MODE2=100ms(10Hz, UART 115200 限制)
 
-# 模型约束 (g_model_kamm, 补录分支)
-MODEL = dict(a_long=5.0, a_brake=3.0, a_lat=4.0, v_max=5.0,
-             nn_a_max=5.0, nn_a_brake=3.0, nn_o_max=14.0)
-A_BRAKE_MAX = 3.0
+# 模型约束: 由所选模型的 model_desc_t 提供 (工厂模式, 见 load_model_desc_from_c)
+# a_long/a_lat/nn_* = 训练包络; v_max = 部署限制 (可被手工下调, 如 d5v15 的 5.0→1.0)
 
 # 当年 6 点坐标 (cm → m)
 BEACON_WORLD_CM = np.array([
@@ -81,13 +84,52 @@ BEACONS = BEACON_WORLD_CM * 0.01
 CAR_START = np.array([0.0, 0.0])
 
 
-# ═══════════════════ NN (解析部署 C 文件) ═══════════════════
+# ═══════════════════ 模型描述 (解析部署 C 文件) ═══════════════════
+# 默认部署模型: gpmed_v4 (Kamm v4, GP-Medium 9K) — 切换改这里或 --c-model
+DEFAULT_C_MODEL = 'nn_model_gpmed_v4.c'
 _C_W_RE = re.compile(r'static const f32 (\w+)\[\d+\] = \{\s*([^}]*)\};')
+_DESC_FIELDS = ('a_long_max', 'a_brake_max', 'a_lat_max', 'v_max',
+                'nn_a_max', 'nn_a_brake_max', 'nn_o_max')
+
+_desc_cache = {}
+
+
+def load_model_desc_from_c(c_path):
+    """解析部署 C 文件的 model_desc_t → 环境约束 dict.
+
+    与固件 g_model_active 一致: 摩擦圆/速度上限/NN 输出钳位全部随模型走,
+    不在仿真里硬编码. 注意各字段来源不同 —
+    a_long/a_brake/a_lat/nn_* 是训练包络; v_max 是部署限制 (实车可手工下调).
+    """
+    key = str(c_path)
+    if key in _desc_cache:
+        return _desc_cache[key]
+    src = Path(c_path).read_text(encoding='utf-8')
+    m = re.search(r'const\s+model_desc_t\s+g_model_\w+\s*=\s*\{(.*?)\}\s*;', src, re.S)
+    if not m:
+        raise SystemExit(f'未找到 model_desc_t 定义: {c_path}')
+    body = m.group(1)
+    desc = {}
+    for f in _DESC_FIELDS:
+        mm = re.search(r'\.' + f + r'\s*=\s*([-\d.eE+]+)f?', body)
+        if not mm:
+            raise SystemExit(f'model_desc_t 缺字段 {f}: {c_path}')
+        desc[f] = float(mm.group(1))
+    _desc_cache[key] = desc
+    return desc
+
+
+def default_model_desc():
+    return load_model_desc_from_c(CODE / 'core' / DEFAULT_C_MODEL)
 
 def load_nn_from_c(c_path=None):
-    """解析 nn_model_a5b3l4.c → 权重 dict (scale 已折叠, 输入用原始物理量)."""
-    c_path = c_path or CODE / 'core' / 'nn_model_a5b3l4.c'
-    src = Path(c_path).read_text(encoding='utf-8')
+    """解析 nn_model_*.c → 权重 dict (scale 已折叠, 输入用原始物理量).
+
+    维度从数组长度自推断 (fc*_b.size = 输出维, fc1_w.size // h1 = concat 维),
+    因此兼容 GP-Small 3.7K (8/8/48/32/16) 与 GP-Medium 9K (10/10/64/64/32).
+    """
+    c_path = Path(c_path) if c_path else CODE / 'core' / DEFAULT_C_MODEL
+    src = c_path.read_text(encoding='utf-8')
     W = {}
     for name, body in _C_W_RE.findall(src):
         vals = [float(x.rstrip('f')) for x in body.split(',') if x.strip()]
@@ -98,12 +140,15 @@ def load_nn_from_c(c_path=None):
     if missing:
         raise SystemExit(f'C 权重解析失败, 缺 {missing}: {c_path}')
     # C 平铺数组按 w[i*in_dim+j] 行主序存放 → reshape 回矩阵
-    W['fc_state_w'] = W['fc_state_w'].reshape(8, 2)
-    W['fc_tgt_w']   = W['fc_tgt_w'].reshape(8, 2)
-    W['fc1_w'] = W['fc1_w'].reshape(48, 32)
-    W['fc2_w'] = W['fc2_w'].reshape(32, 48)
-    W['fc3_w'] = W['fc3_w'].reshape(16, 32)
-    W['fc4_w'] = W['fc4_w'].reshape(2, 16)
+    h_state = W['fc_state_b'].size
+    h_tgt   = W['fc_tgt_b'].size
+    h1, h2, h3 = W['fc1_b'].size, W['fc2_b'].size, W['fc3_b'].size
+    W['fc_state_w'] = W['fc_state_w'].reshape(h_state, 2)
+    W['fc_tgt_w']   = W['fc_tgt_w'].reshape(h_tgt, 2)
+    W['fc1_w'] = W['fc1_w'].reshape(h1, h_state + 3 * h_tgt)
+    W['fc2_w'] = W['fc2_w'].reshape(h2, h1)
+    W['fc3_w'] = W['fc3_w'].reshape(h3, h2)
+    W['fc4_w'] = W['fc4_w'].reshape(2, h3)
     return W
 
 
@@ -128,7 +173,7 @@ def wrap_pi(a):
 
 
 def polar_encode_c(vst, g1, g2, g3, v2, v3):
-    """与 nn_model_a5b3l4.c polar_encode 一致: 原始物理量 (scale 已折叠进权重)."""
+    """与部署 C 模型的 polar_encode 一致: 原始物理量 (scale 已折叠进权重)."""
     out = np.zeros(10)
     dx1, dy1 = g1[0] - vst[0], g1[1] - vst[1]
     out[0] = vst[3]                 # v
@@ -164,8 +209,9 @@ def polar_encode_pt(vst, g1, g2, g3, v2, v3):
 class NNPlanner:
     """GP-Small 3.7K: polar_8d → 32 → 48 → 32 → 16 → 2 (ReLU)."""
 
-    def __init__(self, weights, normalize=False):
+    def __init__(self, weights, normalize=False, desc=None):
         self.normalize = normalize
+        self.desc = desc if desc is not None else default_model_desc()
         if normalize:  # torch 检查点键名
             (w, b), W = weights['state_enc'], {}
             W['fc_state_w'], W['fc_state_b'] = w, b
@@ -196,8 +242,9 @@ class NNPlanner:
         h = self._dense(h, W['fc2_w'], W['fc2_b'], relu=True)
         h = self._dense(h, W['fc3_w'], W['fc3_b'], relu=True)
         out = self._dense(h, W['fc4_w'], W['fc4_b'])
-        a = np.clip(out[0], -MODEL['nn_a_brake'], MODEL['nn_a_max'])
-        om = np.clip(out[1], -MODEL['nn_o_max'], MODEL['nn_o_max'])
+        d = self.desc
+        a = np.clip(out[0], -d['nn_a_brake_max'], d['nn_a_max'])
+        om = np.clip(out[1], -d['nn_o_max'], d['nn_o_max'])
         return a, om
 
 
@@ -292,7 +339,8 @@ class TireBicyclePlant:
 
 # ═══════════════════ 状态估计 (镜像 estimator.c) ═══════════════════
 class Estimator:
-    def __init__(self, yaw_noise_deg=0.0, tau_n=0.05):
+    def __init__(self, yaw_noise_deg=0.0, tau_n=0.02):
+        # τ=20ms: 匹配实车四元数噪声谱 (亚赫兹分量≈0.57°, 无 0.1-0.5Hz 假低频)
         self.v_filt = 0.0
         self.yaw_offset = 0.0
         self.s = np.zeros(5)  # x, y, theta, v, delta (估计值 g_car)
@@ -371,23 +419,25 @@ def lateral_step(car, vst, gyro_z, ey):
 
 
 # ═══════════════════ VST 摩擦圆运动学 (镜像 kinematics.c) ═══════════════════
-def mcu_kinematics_step(s, a_raw, w_raw, dt=CTRL_DT):
-    an = float(np.clip(a_raw, -MODEL['a_brake'], MODEL['a_long']))
+def mcu_kinematics_step(s, a_raw, w_raw, desc, dt=CTRL_DT):
+    """desc: 该模型的 model_desc_t (摩擦圆/速度上限随模型走, 同固件 g_model_active)."""
+    am, bm, lm, vm = desc['a_long_max'], desc['a_brake_max'], desc['a_lat_max'], desc['v_max']
+    an = float(np.clip(a_raw, -bm, am))
     om = float(np.clip(w_raw, -OMEGA_DELTA_MAX, OMEGA_DELTA_MAX))
 
     vn = s[3] + an * dt
-    if vn > MODEL['v_max']:
-        vn = MODEL['v_max']
-        al = (s[3] > MODEL['v_max']) and -MODEL['a_brake'] or ((MODEL['v_max'] - s[3]) / dt)
+    if vn > vm:
+        vn = vm
+        al = (s[3] > vm) and -bm or ((vm - s[3]) / dt)
     elif vn < 0.0:
         al = (0.0 - s[3]) / dt
         vn = 0.0
     else:
         al = an
 
-    semi = MODEL['a_long'] if al >= 0.0 else MODEL['a_brake']
+    semi = am if al >= 0.0 else bm
     r = float(np.clip(al / (semi + 1e-8), -1.0, 1.0))
-    alm = MODEL['a_lat'] * np.sqrt(max(1.0 - r * r, 0.0) + 1e-12)
+    alm = lm * np.sqrt(max(1.0 - r * r, 0.0) + 1e-12)
 
     vs = max(vn, 0.01)
     dl = np.arctan(alm * WHEELBASE / (vs * vs))
@@ -428,11 +478,12 @@ def tsp_solve(points, start):
 class Planner:
     SLOT_HOME = 0xFF
 
-    def __init__(self, nn):
+    def __init__(self, nn, desc=None):
         self.nn = nn
         self.queue = []
         self.wp_active = False
-        self.plan = (-A_BRAKE_MAX, 0.0)
+        self.desc = desc if desc is not None else default_model_desc()
+        self.plan = (-self.desc['a_brake_max'], 0.0)
         self.car_prev = CAR_START.copy()
 
     def init(self):
@@ -443,17 +494,17 @@ class Planner:
 
     def step(self, car_xy, vst, g_ms):
         if not self.wp_active:
-            self.plan = (-A_BRAKE_MAX, 0.0)
+            self.plan = (-self.desc['a_brake_max'], 0.0)
             return
         g = self.queue[:3]
         if not g:
-            self.plan = (-A_BRAKE_MAX, 0.0)
+            self.plan = (-self.desc['a_brake_max'], 0.0)
             return
         if check_hit_substep(*self.car_prev, *car_xy, g[0][1], g[0][2], TOL_XY):
             self.queue = [w for w in self.queue if w[0] != g[0][0]]
             g = self.queue[:3]
             if not g:
-                self.plan = (-A_BRAKE_MAX, 0.0)
+                self.plan = (-self.desc['a_brake_max'], 0.0)
                 return
         while len(g) < 3:
             g.append(g[-1])
@@ -467,10 +518,11 @@ class Planner:
 
 # ═══════════════════ 主仿真 ═══════════════════
 def simulate(mode=2, t_max=None, nn=None, plant=None, plot=False, out=None,
-             csv_ms=None, yaw_noise=0.0, servo_tau=0.0):
+             csv_ms=None, yaw_noise=0.0, servo_tau=0.0, resync=True, model_desc=None):
     assert mode in (1, 2)
+    desc = model_desc if model_desc is not None else default_model_desc()
     if nn is None:
-        nn = NNPlanner(load_nn_from_c())
+        nn = NNPlanner(load_nn_from_c(), desc=desc)
     if plant is None:
         plant = CarPlant(tau_s=servo_tau)
 
@@ -478,7 +530,7 @@ def simulate(mode=2, t_max=None, nn=None, plant=None, plot=False, out=None,
     plant_s = np.zeros(5)      # x, y, theta, v, omega
     est = Estimator(yaw_noise_deg=yaw_noise)
     ladrc = LADRC()
-    planner = Planner(nn)
+    planner = Planner(nn, desc=desc)
     if mode == 2:
         planner.init()
     step_rx = 0.0
@@ -507,9 +559,9 @@ def simulate(mode=2, t_max=None, nn=None, plant=None, plot=False, out=None,
         est.update(plant_s, cmd['servo_delta'])
 
         if div == 0:
-            if mode == 2:
+            if mode == 2 and resync:
                 dx, dy = vst[0] - est.s[0], vst[1] - est.s[1]
-                if dx * dx + dy * dy > 0.05 * 0.05:   # 误差>5cm 重同步
+                if dx * dx + dy * dy > 0.05 * 0.05:   # 误差>5cm 重同步 (兜底, 可关)
                     vst[:] = est.s
             if mode == 1 and step_rx == 0.0 and g_ms >= STARTUP_DELAY_MS:
                 step_rx = STEP_TEST_DX
@@ -519,7 +571,7 @@ def simulate(mode=2, t_max=None, nn=None, plant=None, plot=False, out=None,
                 thr_l, thr_r = ladrc.step(est.s[3], 0.0, 0.0,
                                           step_rx - est.s[0], 0.0)
             else:
-                a_eff, w_eff = mcu_kinematics_step(vst, planner.plan[0], planner.plan[1])
+                a_eff, w_eff = mcu_kinematics_step(vst, planner.plan[0], planner.plan[1], desc)
                 ct, st = np.cos(vst[2]), np.sin(vst[2])
                 ex = (vst[0] - est.s[0]) * ct + (vst[1] - est.s[1]) * st
                 ey = (est.s[0] - vst[0]) * st - (est.s[1] - vst[1]) * ct
@@ -557,7 +609,7 @@ def simulate(mode=2, t_max=None, nn=None, plant=None, plot=False, out=None,
 
     data = np.array(rows)
     if out is None:
-        out = PROJ / 'tools' / ('sim_step.csv' if mode == 1 else 'sim_run.csv')
+        out = DATA / ('sim_step.csv' if mode == 1 else 'sim_run.csv')
     out = Path(out)
     if mode == 1:
         header = ('#pos-step kp=%.1f kd=%.1f b0=%.1f alpha=%.1f wo=%.1f dx=%.1fm\n'
@@ -612,7 +664,7 @@ def plot_overview(mode, data, out):
         axes[1, 0].legend(); axes[1, 0].grid(True); axes[1, 0].set_title('lateral')
         axes[1, 1].plot(t, data[:, 11], label='f_hat'); axes[1, 1].legend()
         axes[1, 1].grid(True); axes[1, 1].set_title('f_hat')
-    png = out.with_suffix('.png')
+    png = OUT / (Path(out).stem + '.png')
     fig.savefig(str(png), dpi=150, facecolor='#1a1a19')
     plt.close()
     print(f'Saved: {png}')
@@ -623,6 +675,9 @@ def main():
     ap.add_argument('--mode', type=int, default=2, choices=[1, 2])
     ap.add_argument('--ckpt', type=str, default=None,
                     help='训练检查点 .pt (未折叠权重, 输入归一化); 默认解析部署 C 文件')
+    ap.add_argument('--c-model', type=str, default=DEFAULT_C_MODEL,
+                    help=f'core/ 下的部署 C 模型文件 (默认 {DEFAULT_C_MODEL}; '
+                         'nn_model_sym3_d5v15.c)')
     ap.add_argument('--t-max', type=float, default=None)
     ap.add_argument('--f0', type=float, default=0.0, help='恒定残差扰动 [m/s²] (负=阻力/坡度)')
     ap.add_argument('--c2', type=float, default=0.0, help='二次阻力系数 (v|v| 项)')
@@ -640,16 +695,26 @@ def main():
                     help='航向测量噪声 std [deg] (IMU 四元数抖动, OU 过程 τ=50ms)')
     ap.add_argument('--servo-tau', type=float, default=0.0,
                     help='舵机一阶滞后时间常数 [ms] (0=理想舵机)')
+    ap.add_argument('--no-resync', action='store_true',
+                    help='关闭 VST 5cm 重同步 (实车为意外兜底, 仿真可验证其必要性)')
     ap.add_argument('--plot', action='store_true')
     ap.add_argument('--out', type=str, default=None)
     ap.add_argument('--csv-ms', type=int, default=20,
                     help='CSV 打印周期 [ms] (车端 MODE2=100/UART限制, 仿真默认 20, 5=200Hz 全保真)')
+    ap.add_argument('--v-max', type=float, default=None,
+                    help='覆盖 model_desc_t 的 v_max [m/s] (部署限制, 如 d5v15 部署为 1.0 训练为 5.0); '
+                         '只在仿真内生效, 不动 C 文件')
     args = ap.parse_args()
 
+    # 模型描述 (环境约束) 始终取自 --c-model, 与权重来源无关
+    desc = load_model_desc_from_c(CODE / 'core' / args.c_model)
+    if args.v_max is not None:
+        desc = dict(desc, v_max=args.v_max)   # 副本, 不污染缓存
+    print('模型约束 (model_desc_t): ' + '  '.join(f'{k}={v:g}' for k, v in desc.items()))
     if args.ckpt:
-        nn = NNPlanner(load_nn_from_pt(args.ckpt), normalize=True)
+        nn = NNPlanner(load_nn_from_pt(args.ckpt), normalize=True, desc=desc)
     else:
-        nn = NNPlanner(load_nn_from_c())
+        nn = NNPlanner(load_nn_from_c(CODE / 'core' / args.c_model), desc=desc)
     if args.tire:
         plant = TireBicyclePlant(alpha=args.plant_alpha, b0=args.plant_b0,
                                  f0=args.f0, c2=args.c2,
@@ -661,7 +726,7 @@ def main():
                          tau_s=args.servo_tau * 1e-3)
     simulate(mode=args.mode, t_max=args.t_max, nn=nn, plant=plant,
              plot=args.plot, out=args.out, csv_ms=args.csv_ms,
-             yaw_noise=args.yaw_noise)
+             yaw_noise=args.yaw_noise, resync=not args.no_resync, model_desc=desc)
 
 
 if __name__ == '__main__':

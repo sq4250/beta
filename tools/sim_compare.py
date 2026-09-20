@@ -14,8 +14,11 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 PROJ = Path(__file__).resolve().parents[1]
-REAL = PROJ / 'tools' / 'run_data.csv'
-SIM = PROJ / 'tools' / 'sim_run.csv'
+TOOLS = PROJ / 'tools'
+DATA = TOOLS / 'data'
+OUT = TOOLS / 'out'
+REAL = DATA / 'run_data.csv'
+SIM = DATA / 'sim_run.csv'
 
 # 补录: 当年 6 点坐标 (与 plot_run.py 一致)
 WPS = np.array([[0, 0], [1.715, 0.815], [3.445, 1.43], [4.565, 0.095],
@@ -82,7 +85,7 @@ def stat_lines(ex, ey, eth):
 def main():
     real_csv = Path(sys.argv[1]) if len(sys.argv) > 1 else REAL
     sim_csv = Path(sys.argv[2]) if len(sys.argv) > 2 else SIM
-    out = Path(sys.argv[3]) if len(sys.argv) > 3 else PROJ / 'tools' / 'sim_vs_real.png'
+    out = Path(sys.argv[3]) if len(sys.argv) > 3 else OUT / 'sim_vs_real.png'
     t_r, vx_r, vy_r, cx_r, cy_r, vth_r, cth_r, vc_r, vv_r = load(real_csv)
     t_s, vx_s, vy_s, cx_s, cy_s, vth_s, cth_s, vc_s, vv_s = load(sim_csv)
 

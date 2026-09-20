@@ -3165,28 +3165,16 @@
             <file>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_a5b3l4.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_a5b3l4.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_sym3.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_sym3.h</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_sym3_d5.c</name>
-            </file>
-            <file>
-                <name>$PROJ_DIR$\..\..\code\core\nn_model_sym3_d5.h</name>
-            </file>
-            <file>
                 <name>$PROJ_DIR$\..\..\code\core\nn_model_sym3_d5v15.c</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\code\core\nn_model_sym3_d5v15.h</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_gpmed_v4.c</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\code\core\nn_model_gpmed_v4.h</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\code\core\model_factory.h</name>

@@ -20,7 +20,10 @@ from pathlib import Path
 import numpy as np
 
 PROJ = Path(__file__).resolve().parents[1]
-DATA = PROJ / 'tools' / 'sim_run.csv'
+TOOLS = PROJ / 'tools'
+DATA = TOOLS / 'data'
+OUT = TOOLS / 'out'
+DEFAULT_CSV = DATA / 'sim_run.csv'
 
 WPS = np.array([[0, 0], [1.715, 0.815], [3.445, 1.43], [4.565, 0.095],
                 [2.965, -0.075], [3.70, -1.48], [1.91, -1.09]])
@@ -126,7 +129,7 @@ def set_car(body, wheels, nose, x, y, th_deg, steer_deg=None):
 
 def main():
     args = dict(fps=30, speed=1.0, window=4.0, out=None, preview=None)
-    path = str(DATA)
+    path = str(DEFAULT_CSV)
     argv = sys.argv[1:]
     i = 0
     while i < len(argv):
@@ -155,7 +158,7 @@ def main():
     video_dur = dur / args['speed']
     total_frames = max(int(video_dur * args['fps']), 1)
     frame_times = np.linspace(t[0], t[-1], total_frames)
-    out = Path(args['out']) if args['out'] else Path(path).with_name(Path(path).stem + '_scope.mp4')
+    out = Path(args['out']) if args['out'] else OUT / (Path(path).stem + '_scope.mp4')
     print(f'{n} pts {ncols} cols, t=[{t[0]:.2f},{t[-1]:.2f}]s, {args["fps"]}fps '
           f'{args["speed"]}x → {total_frames} frames, servo={has_servo}')
 

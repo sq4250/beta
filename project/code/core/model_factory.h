@@ -27,9 +27,7 @@ typedef struct {
 extern const model_desc_t *g_model_active;
 
 /* ── 模型实例 (各 .c 定义, 按编译条件可见) ── */
-extern const model_desc_t g_model_kamm;
-extern const model_desc_t g_model_sym3;
-extern const model_desc_t g_model_d5;
 extern const model_desc_t g_model_d5v15;
+extern const model_desc_t g_model_gpmed_v4;
 
 #endif

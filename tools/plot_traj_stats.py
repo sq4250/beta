@@ -14,7 +14,10 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 PROJ = Path(__file__).resolve().parents[1]
-DATA = PROJ / 'tools' / 'run_data.csv'
+TOOLS = PROJ / 'tools'
+DATA = TOOLS / 'data'
+OUT = TOOLS / 'out'
+CSV_DEFAULT = DATA / 'run_data.csv'
 
 # 补录: 当年 6 点坐标 (与 plot_run.py / animate_run.py 一致)
 WPS = np.array([[0, 0], [1.715, 0.815], [3.445, 1.43], [4.565, 0.095],
@@ -136,12 +139,12 @@ def main(path):
     fig.suptitle(f'Trajectory  |  {Path(path).name}  |  {len(t)}pts  {t[-1]:.1f}s',
                  fontsize=12, fontweight='bold', color=P, y=0.97)
 
-    out = Path(path).with_name(Path(path).stem + '_traj.png')
+    out = OUT / (Path(path).stem + '_traj.png')
     fig.savefig(str(out), dpi=FIG_DPI, facecolor=BG, edgecolor='none')
     plt.close()
     print(f'Saved: {out}')
 
 
 if __name__ == '__main__':
-    p = sys.argv[1] if len(sys.argv) > 1 else str(DATA)
+    p = sys.argv[1] if len(sys.argv) > 1 else str(CSV_DEFAULT)
     main(p)
